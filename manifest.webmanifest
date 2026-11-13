@@ -1,0 +1,24 @@
+{
+  "name": "奇妙毒物科学游乐园 · 致命毒物大百科互动馆",
+  "short_name": "毒物游乐园",
+  "description": "《致命毒物大百科》99实拍图鉴 · 360° 3D分子 · 借毒养成 · 王牌对战 · 小馆长配音间",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "assets/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

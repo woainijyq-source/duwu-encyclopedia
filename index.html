@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="奇妙毒物游乐园" />
+  <title>奇妙毒物科学游乐园 · 99实拍图鉴·3D分子·借毒养成·王牌对战</title>
+  <link rel="manifest" href="manifest.webmanifest?v=3.2" />
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=3.2" />
+  <link rel="icon" type="image/png" href="assets/icon-512.png?v=3.2" />
+  <link rel="stylesheet" href="css/styles.css?v=3.2" />
+</head>
+<body>
+
+  <!-- 顶部游戏化导航栏（零啰嗦文字！） -->
+  <header class="top-bar">
+    <div class="top-bar-inner">
+      <div class="logo-chip">
+        <span class="logo-icon">🧪</span>
+        <span>奇妙毒物游乐园</span>
+      </div>
+
+      <nav class="stage-tabs" aria-label="四大互动游乐场">
+        <button class="stage-tab active" data-stage="world">🗺️ 生态寻宝 &amp; 99实拍卡</button>
+        <button class="stage-tab" data-stage="biolab">🔬 分子手术 &amp; 借毒养成</button>
+        <button class="stage-tab" data-stage="pharmacy">💊 化毒为药急诊室</button>
+        <button class="stage-tab" data-stage="detective">🃏 王牌对战 &amp; 四大找茬</button>
+      </nav>
+
+      <div class="utility-pills">
+        <div class="star-counter" id="starCounter">⭐ 0</div>
+        <button class="mini-btn on" id="btnSound" title="音效开关">🔊 音效</button>
+        <button class="mini-btn on" id="btnPinyin" title="生僻字拼音开关">🔤 拼音</button>
+        <button class="mini-btn" id="btnTheme" title="深浅主题">☀️ 亮色</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="playground-wrap">
+
+    <!-- ==================== 第 1 站：全景寻宝地图 + 99张高清实拍3D闪卡 + 小馆长配音墙 ==================== -->
+    <section id="stage-world" class="stage-view active">
+
+      <!-- 交互式五合一自然生态插画全景图（直接点上面的发光生物头像！） -->
+      <div class="panorama-card" id="panoramaStage">
+        <img src="assets/scenes/panorama.jpg" alt="毒物自然栖息地全景寻宝图" class="panorama-img" />
+        <div class="panorama-overlay-hint">👆 点画里的发光生物与奇石，转 3D 分子 + 录小馆长配音！</div>
+        <div id="panoramaPins"></div>
+      </div>
+
+      <!-- 魔法分类滤镜球（含🎙️小馆长已配音专属滤镜！） -->
+      <div class="filter-dock">
+        <div class="magic-pills" id="magicFilterBar">
+          <button class="magic-pill active" data-mfilter="all">🌟 全部 99 张实拍卡</button>
+          <button class="magic-pill" data-mfilter="voiced" id="pillVoicedFilter">🎙️ 小馆长已配音 (0/99)</button>
+          <button class="magic-pill" data-mfilter="neuro">⚡ 锁死神经</button>
+          <button class="magic-pill" data-mfilter="blood">🩸 攻击血液</button>
+          <button class="magic-pill" data-mfilter="cell">🏭 停摆细胞</button>
+          <button class="magic-pill" data-mfilter="med">💊 能变救命药</button>
+        </div>
+        <input type="search" id="dexSearch" class="quick-search" placeholder="🔍 搜名字（如：河鲀、鵙鹟）" />
+      </div>
+
+      <!-- 原书 9 大章节图标筹码 -->
+      <div class="chapter-strip" id="chapterStrip"></div>
+
+      <!-- 99 张高清生物/植物/蘑菇/海洋/矿物实拍闪卡网格 -->
+      <div class="photo-dex-grid" id="photoDexGrid"></div>
+    </section>
+
+    <!-- ==================== 第 2 站：微观细胞 + 分子拆弹手术台 + 食物链借毒养成缸 ==================== -->
+    <section id="stage-biolab" class="stage-view">
+      <div class="biolab-mode-bar">
+        <button class="magic-pill active biolab-sub-btn" data-sub="cell">⚡ 1. 活体细胞滴管</button>
+        <button class="magic-pill biolab-sub-btn" data-sub="molsurgery">🔑 2. 3D分子插锁孔 &amp; 剪基团</button>
+        <button class="magic-pill biolab-sub-btn" data-sub="ecosystem">🐸 3. 食物链借毒养成缸</button>
+        <button class="magic-pill biolab-sub-btn" data-sub="tummy">🍫 4. 人狗吃黑巧 &amp; 蘑菇配酒</button>
+      </div>
+
+      <!-- 子游乐场 1：Kurzgesagt 风活体细胞交互画布 -->
+      <div id="biolabCellPanel" class="cell-arena-card">
+        <div class="cell-canvas-stage" id="cellDropZone">
+          <canvas id="cellPlayCanvas"></canvas>
+
+          <div class="vital-hud">
+            <span class="vital-heart" id="hudHeartIcon">💓</span>
+            <div>
+              <div style="font-size:0.76rem;color:#94a3b8;font-weight:800;">细胞生命监测仪</div>
+              <div style="font-size:1.05rem;font-weight:900;" id="hudBpmText">75 BPM · 健康活力满满！</div>
+            </div>
+          </div>
+
+          <div class="speech-toast" id="cellSpeechToast">
+            👇 点下方任意毒物试剂瓶（或拖到细胞上），看看城门和齿轮会发生什么！
+          </div>
+        </div>
+
+        <!-- 底部实拍头像试剂托盘 -->
+        <div class="dropper-tray" id="reagentTray"></div>
+      </div>
+
+      <!-- 子游乐场 2（升级2）：分子锁孔配对 & 乌头碱剪基团 & 100°C 沸水双锅对比 -->
+      <div id="biolabSurgeryPanel" class="surgery-shell" style="display:none;">
+        <div class="sub-pill-bar">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="scene-pill active surgery-mode-btn" data-smode="ttx_lock">🔑 关卡A：河鲀毒素插锁孔</button>
+            <button class="scene-pill surgery-mode-btn" data-smode="aconitine_surgery">✂️ 关卡B：乌头碱剪双基团脱毒</button>
+            <button class="scene-pill surgery-mode-btn" data-smode="boil_duel">🍲 关卡C：100°C 四季豆 vs 白鹅膏</button>
+          </div>
+          <div id="surgeryExtraTools" style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="big-action-btn" id="btnFlipTTXKey" style="padding:8px 16px;min-height:40px;font-size:0.9rem;">🔄 翻转钥匙方向</button>
+            <button class="big-action-btn" id="btnToggleBoilPot" style="display:none;padding:8px 16px;min-height:40px;font-size:0.9rem;">🔥 点火煮沸到 100°C！</button>
+            <button class="mini-btn" id="btnResetSurgery">🔄 重置本关</button>
+          </div>
+        </div>
+
+        <div class="surgery-canvas-wrap">
+          <canvas id="molSurgeryCanvas"></canvas>
+          <div class="speech-toast" id="surgeryToast">
+            🔑 试试把左边的『河鲀毒素』拖进右边的细胞城门锁孔！
+          </div>
+        </div>
+      </div>
+
+      <!-- 子游乐场 3（升级1）：食物链借毒喂食养成生态缸 -->
+      <div id="biolabEcoPanel" class="eco-tank-shell" style="display:none;">
+        <div class="sub-pill-bar">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;" id="ecoSpeciesTabs">
+            <button class="scene-pill active" data-esp="frog">🐸 养黄金箭毒蛙</button>
+            <button class="scene-pill" data-esp="puffer">🐡 养红鳍东方鲀</button>
+            <button class="scene-pill" data-esp="snake">🐍 养虎斑颈槽蛇</button>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="mini-btn" id="btnOpenEcoArchive">📖 看它的原书档案</button>
+            <button class="mini-btn" id="btnResetEco">🔄 换一只新宝宝</button>
+          </div>
+        </div>
+
+        <div class="eco-canvas-wrap">
+          <canvas id="ecoSandboxCanvas"></canvas>
+
+          <div class="eco-meter-overlay">
+            <div style="font-size:0.78rem;font-weight:800;color:#fde047;" id="ecoMeterLabel">✨ 皮肤生物碱毒衣浓度</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-top:5px;">
+              <div style="flex:1;height:12px;background:rgba(255,255,255,0.14);border-radius:99px;overflow:hidden;">
+                <div id="ecoMeterFill" style="width:0%;height:100%;background:linear-gradient(90deg,#fbbf24,#4ade80);transition:width 0.3s;"></div>
+              </div>
+              <span style="font-weight:900;font-size:0.9rem;" id="ecoMeterPct">0%</span>
+            </div>
+          </div>
+
+          <div class="speech-toast" id="ecoToast">
+            🐣 刚孵化的箭毒蛙宝宝其实一点毒都没有！快喂它不同食物试试看！
+          </div>
+        </div>
+
+        <div class="eco-action-dock">
+          <button class="feed-btn" id="btnEcoSafeFood">🪰 喂普通果蝇（无毒）</button>
+          <button class="feed-btn toxic" id="btnEcoToxicFood">🐜 喂雨林毒蚂蚁/甲虫！</button>
+          <button class="feed-btn predator" id="btnEcoPredator">🐍 放捕食小蛇来试探！</button>
+        </div>
+      </div>
+
+      <!-- 子游乐场 4：卡通肚子代谢酶大比拼 -->
+      <div id="biolabTummyPanel" style="display:none;">
+        <div style="display:flex;gap:10px;justify-content:center;margin-bottom:16px;flex-wrap:wrap;">
+          <button class="big-action-btn" id="btnFeedChoco">🍫 一起喂 1 块黑巧克力！</button>
+          <button class="mini-btn" id="btnSwitchMushroomMode" style="font-size:0.95rem;padding:10px 18px;">🍄 切换到：墨汁鬼伞蘑菇 + 啤酒实验</button>
+          <button class="mini-btn" id="btnResetTummy" style="font-size:0.95rem;padding:10px 18px;">🔄 清空小肚子</button>
+        </div>
+
+        <div class="tummy-duel-grid" id="tummyDuelStage"></div>
+      </div>
+    </section>
+
+    <!-- ==================== 第 3 站：化毒为药 · 分子炼金急诊室 ==================== -->
+    <section id="stage-pharmacy" class="stage-view">
+      <div class="clinic-layout">
+        <div class="patient-tabs" id="clinicPatientTabs"></div>
+        <div class="synth-machine-card" id="clinicStage"></div>
+      </div>
+    </section>
+
+    <!-- ==================== 第 4 站：99王牌生化对战 + 四大绘本场景找毒物 + 闪卡抢答 ==================== -->
+    <section id="stage-detective" class="stage-view">
+      <div class="biolab-mode-bar" style="justify-content:space-between;align-items:center;">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <button class="magic-pill active det-sub-btn" data-dsub="battler">🃏 游戏1：大百科 99 王牌生化对战</button>
+          <button class="magic-pill det-sub-btn" data-dsub="hunt" id="btnDetHuntTab">👀 游戏2：四大场景找毒物（0/25）</button>
+          <button class="magic-pill det-sub-btn" data-dsub="flashpk">📸 游戏3：看真身照片 · 抢答目录</button>
+        </div>
+        <div id="huntToolbar" style="display:none;gap:8px;">
+          <button class="mini-btn on" id="btnHuntHint">💡 放大镜提示</button>
+          <button class="mini-btn" id="btnHuntReset">🔄 重玩本关</button>
+        </div>
+      </div>
+
+      <!-- 子游戏 1（升级3）：双人同屏 / 挑战博士 王牌生化属性对战 -->
+      <div id="detBattlerPanel">
+        <div id="cardBattlerMount"></div>
+      </div>
+
+      <!-- 子游戏 2（升级5）：四大主题高清手绘绘本找毒物（共 25 处！） -->
+      <div id="detHuntPanel" style="display:none;">
+        <div class="scene-picker-bar" id="huntSceneTabs"></div>
+
+        <div class="hunt-scene-box" id="huntSceneBox">
+          <img id="huntSceneImg" src="assets/scenes/picnic_hunt.jpg" alt="场景找毒物挑战" class="hunt-scene-img" />
+          <div id="huntHotspotsLayer"></div>
+          <div class="speech-toast" id="huntToast">
+            🕵️‍♀️ 图里藏着《致命毒物大百科》里的危险家伙！快用手指把它们全点出来！
+          </div>
+        </div>
+      </div>
+
+      <!-- 子游戏 3：高清实拍闪卡抢答 PK -->
+      <div id="detFlashPanel" style="display:none;">
+        <div class="flashcard-arena" id="flashcardArena"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================== 超级视觉闪卡弹窗 (实拍大图 + 全书99卡3D分子 + 小馆长录音间 + 沸水/胃酸实验) ==================== -->
+  <div class="card-modal-backdrop" id="superCardModal" role="dialog" aria-modal="true">
+    <div class="super-card-modal">
+      <button class="close-circle-btn" id="btnCloseSuperModal" aria-label="关闭">✕</button>
+      <div class="super-card-grid">
+        <!-- 左半边：高清实拍照片 & 真 3D 旋转分子 -->
+        <div>
+          <div class="visual-showcase-box">
+            <img id="modalPhotoImg" class="showcase-photo" src="" alt="" />
+            <canvas id="mol3dCanvas"></canvas>
+            <div class="view-toggle-pills" id="modalViewSwitch">
+              <button class="view-pill active" data-vmode="photo">📸 看高清真身</button>
+              <button class="view-pill" id="btnSwitch3DMol" data-vmode="mol3d">🧬 转 3D 分子</button>
+            </div>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;flex-wrap:wrap;">
+            <span id="modalCodeBadge" class="mini-btn" style="pointer-events:none;"></span>
+            <button class="big-action-btn" id="btnSpeakCard" style="padding:9px 18px;min-height:42px;font-size:0.92rem;">
+              🔊 电脑朗读简介
+            </button>
+          </div>
+
+          <!-- 升级4：🎙️ 我是毒物馆小馆长 · 专属配音录音间（本地+云同步） -->
+          <div id="modalCuratorVoiceMount"></div>
+        </div>
+
+        <!-- 右半边：零长文！一句话气泡 + 沸水锅按钮 + 胃酸剪刀按钮 + 威力视觉条 -->
+        <div id="modalRightInteractive"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/data-catalog.js?v=3.2"></script>
+  <script src="js/data-photos.js?v=3.2"></script>
+  <script src="js/data-molecules3d.js?v=3.2"></script>
+  <script src="js/data-labs.js?v=3.2"></script>
+  <script src="js/data-hunt-scenes.js?v=3.2"></script>
+  <script src="js/visualizers.js?v=3.2"></script>
+  <script src="js/upgrade1-ecosystem.js?v=3.2"></script>
+  <script src="js/upgrade2-molsurgery.js?v=3.2"></script>
+  <script src="js/upgrade3-battler.js?v=3.2"></script>
+  <script src="js/upgrade4-voice.js?v=3.2"></script>
+  <script src="js/app.js?v=3.2"></script>
+</body>
+</html>

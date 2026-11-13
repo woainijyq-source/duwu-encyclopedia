@@ -1,0 +1,16 @@
+[Unit]
+Description=Duwu Encyclopedia Curator Voice Sync API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/www/wwwroot/duwu-encyclopedia
+Environment="DUWU_VOICE_DIR=/www/wwwroot/duwu-encyclopedia/shared-data/recordings"
+Environment="DUWU_VOICE_HOST=127.0.0.1"
+Environment="DUWU_VOICE_PORT=8798"
+ExecStart=/usr/bin/python3 /www/wwwroot/duwu-encyclopedia/shared-data/voice_server.py
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
