@@ -1,16 +1,15 @@
 // ============================================================================
-// 豆包大模型语音朗读引擎 (Doubao seed-tts-2.0 Client + IndexedDB 永久缓存)
+// 语音讲解引擎 (Doubao seed-tts-2.0 Client + WebAudio 解码 + 逐句放大高亮 + 永久缓存)
 // 四重防重复计费护盾：
-//   1. 内存 Blob 秒播缓存 (0ms)
-//   2. 浏览器 IndexedDB 离线永久缓存 (重启/断网也不再请求)
+//   1. 内存 Blob + AudioBuffer 缓存 (0ms)
+//   2. 浏览器 IndexedDB 离线永久缓存 (刷新/重开永不二次请求)
 //   3. 前端并发单飞去重 (连点按钮绝不重复发请求)
-//   4. 服务端 SHA-256 永久磁盘缓存 (跨设备全家共享同一份 MP3，永不二次调豆包计费!)
+//   4. 服务端 SHA-256 永久磁盘缓存 (跨设备共享同一份 MP3，永不二次调 API 计费!)
 // ============================================================================
 
 (function () {
   const DB_NAME = "duwu_doubao_tts_cache_v1";
   const STORE_NAME = "clips";
-  const SILENT_WAV = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YQAAAAA=";
   const EMOJI_RE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}\u{FE0F}✓✗×➕➖👇👆👈👉➜]+/gu;
 
   function normalizeTtsText(raw) {
@@ -25,53 +24,126 @@
       .slice(0, 260);
   }
 
+  function cleanMoleculeForSpeech(mol) {
+    return String(mol || "")
+      .replace(/\s*[\(（][A-Za-z0-9,\s\-αβγ/]+[\)）]/g, "")
+      .replace(/[\(（][A-Za-z0-9,\s\-]+/g, "（")
+      .replace(/\+/g, "加")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function splitIntoClauses(text) {
+    const str = String(text || "").trim();
+    if (!str) return [];
+    const raw = str.match(/[^。！？；，：]+(?:[。！？；，：”』」）》]+|$)/g) || [str];
+    const merged = [];
+    let buf = "";
+    for (const part of raw) {
+      buf += part;
+      const pureLen = buf.replace(/[『』「」【】（）()《》“”\s，。！？；：、]/g, "").length;
+      if (pureLen >= 7 || /[。！？；]$/.test(buf.trim())) {
+        merged.push(buf);
+        buf = "";
+      }
+    }
+    if (buf) {
+      if (merged.length > 0) merged[merged.length - 1] += buf;
+      else merged.push(buf);
+    }
+    return merged;
+  }
+
+  function escapeAttr(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/"/g, "&quot;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function renderClausesHTML(text, rubyFn) {
+    const clauses = splitIntoClauses(text);
+    const rFn = typeof rubyFn === "function" ? rubyFn : (x) => x;
+    return clauses
+      .map(
+        (c, idx) =>
+          `<span class="tts-seg tts-clause" data-tts-seg="${escapeAttr(c)}" data-clause-idx="${idx}">${rFn(c)}</span>`
+      )
+      .join("");
+  }
+
+  function calcSegmentWeight(rawSegText) {
+    const raw = String(rawSegText || "").trim();
+    const norm = normalizeTtsText(raw);
+    if (!norm) return 1.5;
+
+    let w = 0;
+    for (const ch of norm) {
+      if (/[\u4e00-\u9fff]/.test(ch)) w += 1.0;
+      else if (/[A-Za-z0-9]/.test(ch)) w += 0.45;
+      else w += 0.2;
+    }
+    const majorStops = (raw.match(/[。！？；…]/g) || []).length;
+    const minorStops = (raw.match(/[，、：—]/g) || []).length;
+    w += majorStops * 2.1 + minorStops * 1.15;
+    return Math.max(1.8, w);
+  }
+
   class DoubaoTTSPlayer {
     constructor() {
       this.enabled = true;
       this.db = null;
-      this.memCache = new Map();      // normText -> Blob
-      this.inflight = new Map();      // normText -> Promise<Blob>
+      this.memCache = new Map();       // normText -> Blob
+      this.decodedCache = new Map();   // normText -> AudioBuffer
+      this.inflight = new Map();       // normText -> Promise<Blob>
+
+      this.audioCtx = null;
+      this.activeSource = null;
+      this.playStartCtxTime = 0;
+      this.playOffsetSec = 0;
+      this.playDurationSec = 0;
+
+      // Fallback HTMLAudioElement if WebAudio decode fails
       this.audio = new Audio();
       this.audio.preload = "auto";
       this.audio.playsInline = true;
       this.currentObjectUrl = null;
+      this.usingHtmlAudio = false;
+      this.usingSpeechSynth = false;
+      this.fallbackStartMs = 0;
+
       this.currentNormText = "";
-      this.state = "idle";            // 'idle' | 'loading' | 'playing'
+      this.state = "idle";             // 'idle' | 'loading' | 'playing'
       this.reqToken = 0;
-      this.unlocked = false;
+      this.rafId = null;
+      this.activeContext = null;       // { scopeEl, triggerBtn, statusMountEl, segments, timings, defaultBtnLabel }
       this.listeners = new Set();
 
       this.audio.addEventListener("ended", () => {
-        if (this.state === "playing") this._finishPlayback();
+        if (this.usingHtmlAudio && this.state === "playing") this._finishPlayback();
       });
       this.audio.addEventListener("error", () => {
-        if (this.state === "playing") this._finishPlayback();
+        if (this.usingHtmlAudio && this.state === "playing") this._finishPlayback();
       });
 
       this._openDB();
-      this._bindGestureUnlock();
     }
 
-    _bindGestureUnlock() {
-      const unlock = () => {
-        if (this.unlocked || this.state !== "idle") return;
-        this.unlocked = true;
-        try {
-          this.audio.src = SILENT_WAV;
-          const p = this.audio.play();
-          if (p && typeof p.then === "function") {
-            p.then(() => {
-              if (this.state === "idle") this.audio.pause();
-            }).catch(() => {
-              this.unlocked = false;
-            });
-          }
-        } catch (_) {
-          this.unlocked = false;
-        }
-      };
-      window.addEventListener("pointerdown", unlock, { passive: true });
-      window.addEventListener("touchstart", unlock, { passive: true });
+    normalizeText(rawText) {
+      return normalizeTtsText(rawText);
+    }
+
+    cleanMolecule(mol) {
+      return cleanMoleculeForSpeech(mol);
+    }
+
+    splitIntoClauses(text) {
+      return splitIntoClauses(text);
+    }
+
+    renderClausesHTML(text, rubyFn) {
+      return renderClausesHTML(text, rubyFn);
     }
 
     onStatus(fn) {
@@ -81,7 +153,54 @@
 
     _emit() {
       this.listeners.forEach((fn) => {
-        try { fn(this.state, this.currentNormText); } catch (_) {}
+        try {
+          fn(this.state, this.currentNormText);
+        } catch (_) {}
+      });
+    }
+
+    _ensureAudioContext() {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return null;
+      if (!this.audioCtx) {
+        try {
+          this.audioCtx = new Ctx();
+        } catch (_) {
+          return null;
+        }
+      }
+      if (this.audioCtx.state === "suspended") {
+        try {
+          this.audioCtx.resume();
+        } catch (_) {}
+      }
+      // Play a 1-sample silent buffer synchronously inside user tap to unlock iOS/iPadOS WebAudio
+      try {
+        const silentBuf = this.audioCtx.createBuffer(1, 1, 22050);
+        const src = this.audioCtx.createBufferSource();
+        src.buffer = silentBuf;
+        src.connect(this.audioCtx.destination);
+        src.start(0);
+      } catch (_) {}
+      return this.audioCtx;
+    }
+
+    _decodeAudioData(arrayBuf) {
+      return new Promise((resolve, reject) => {
+        const ctx = this._ensureAudioContext();
+        if (!ctx) return reject(new Error("no_audio_ctx"));
+        try {
+          const res = ctx.decodeAudioData(
+            arrayBuf,
+            (decoded) => resolve(decoded),
+            (err) => reject(err || new Error("decode_err"))
+          );
+          if (res && typeof res.then === "function") {
+            res.then(resolve).catch(reject);
+          }
+        } catch (e) {
+          reject(e);
+        }
       });
     }
 
@@ -140,10 +259,6 @@
       });
     }
 
-    normalizeText(rawText) {
-      return normalizeTtsText(rawText);
-    }
-
     async hasCachedLocal(rawText) {
       const key = normalizeTtsText(rawText);
       if (!key) return false;
@@ -154,27 +269,6 @@
         return true;
       }
       return false;
-    }
-
-    _finishPlayback() {
-      if (this.currentObjectUrl) {
-        URL.revokeObjectURL(this.currentObjectUrl);
-        this.currentObjectUrl = null;
-      }
-      this.state = "idle";
-      this.currentNormText = "";
-      this._emit();
-    }
-
-    stop() {
-      this.reqToken++;
-      try {
-        this.audio.pause();
-      } catch (_) {}
-      if ("speechSynthesis" in window) {
-        try { window.speechSynthesis.cancel(); } catch (_) {}
-      }
-      this._finishPlayback();
     }
 
     async _fetchOrLoadBlob(key) {
@@ -215,62 +309,453 @@
       return p;
     }
 
+    // 结合字数标点权重 + 真实音频波形静音谷（换气停顿点）计算每一句的精确起止时间！
+    _computeSegmentTimings(audioBuffer, segments, totalDuration) {
+      const dur = totalDuration || (audioBuffer ? audioBuffer.duration : 1);
+      if (!segments || !segments.length) return [];
+      if (segments.length === 1) {
+        return [{ start: 0, end: dur, el: segments[0].el }];
+      }
+
+      const weights = segments.map((s) => calcSegmentWeight(s.text));
+      const totalWeight = weights.reduce((a, b) => a + b, 0) || 1;
+
+      let speechStart = 0.04;
+      let speechEnd = Math.max(speechStart + 0.2, dur - 0.08);
+      let rmsFrames = null;
+      const frameSec = 0.02; // 20ms window
+      let avgRms = 0.05;
+
+      if (audioBuffer && audioBuffer.numberOfChannels > 0) {
+        try {
+          const pcm = audioBuffer.getChannelData(0);
+          const sr = audioBuffer.sampleRate || 24000;
+          const step = Math.max(1, Math.floor(sr * frameSec));
+          const nFrames = Math.floor(pcm.length / step);
+          rmsFrames = new Float32Array(nFrames);
+          let sumRms = 0;
+          for (let f = 0; f < nFrames; f++) {
+            let sq = 0;
+            const base = f * step;
+            for (let i = 0; i < step; i += 2) {
+              const v = pcm[base + i] || 0;
+              sq += v * v;
+            }
+            const rms = Math.sqrt(sq / (step / 2));
+            rmsFrames[f] = rms;
+            sumRms += rms;
+          }
+          avgRms = sumRms / Math.max(1, nFrames);
+          const silenceThresh = Math.max(0.004, avgRms * 0.14);
+
+          let firstActive = 0;
+          while (firstActive < nFrames && rmsFrames[firstActive] < silenceThresh) firstActive++;
+          let lastActive = nFrames - 1;
+          while (lastActive > firstActive && rmsFrames[lastActive] < silenceThresh) lastActive--;
+
+          speechStart = Math.max(0, (firstActive - 1) * frameSec);
+          speechEnd = Math.min(dur, (lastActive + 2) * frameSec);
+        } catch (_) {
+          rmsFrames = null;
+        }
+      }
+
+      const activeSpan = Math.max(0.2, speechEnd - speechStart);
+      const boundaries = [0];
+      let cumW = 0;
+
+      for (let i = 0; i < segments.length - 1; i++) {
+        cumW += weights[i];
+        const expectedSec = speechStart + activeSpan * (cumW / totalWeight);
+        let chosenSec = expectedSec;
+
+        if (rmsFrames && rmsFrames.length > 10) {
+          const prevBound = boundaries[boundaries.length - 1];
+          const minAllowed = Math.max(prevBound + 0.28, expectedSec - 0.52);
+          const maxAllowed = Math.min(speechEnd - (segments.length - 1 - i) * 0.25, expectedSec + 0.52);
+
+          if (maxAllowed > minAllowed + 0.06) {
+            const startF = Math.max(1, Math.floor(minAllowed / frameSec));
+            const endF = Math.min(rmsFrames.length - 2, Math.ceil(maxAllowed / frameSec));
+            let bestScore = Infinity;
+            let bestF = Math.round(expectedSec / frameSec);
+
+            for (let f = startF; f <= endF; f++) {
+              // 3-frame (60ms) local window energy + small distance penalty from expectedSec
+              const localRms = (rmsFrames[f - 1] + rmsFrames[f] * 1.5 + rmsFrames[f + 1]) / 3.5;
+              const distSec = Math.abs(f * frameSec - expectedSec);
+              const score = localRms + distSec * avgRms * 0.55;
+              if (score < bestScore) {
+                bestScore = score;
+                bestF = f;
+              }
+            }
+            chosenSec = bestF * frameSec;
+          }
+        }
+
+        boundaries.push(chosenSec);
+      }
+      boundaries.push(dur);
+
+      return segments.map((seg, i) => ({
+        start: boundaries[i],
+        end: boundaries[i + 1],
+        el: seg.el,
+        text: seg.text
+      }));
+    }
+
+    _applyWaitingUI(ctx) {
+      if (!ctx) return;
+      if (ctx.triggerBtn) {
+        ctx.triggerBtn.classList.remove("is-playing");
+        ctx.triggerBtn.classList.add("is-loading");
+        ctx.triggerBtn.innerHTML = `<span class="tts-spinner" aria-hidden="true"></span><span>正在准备…</span>`;
+      }
+      if (ctx.scopeEl) {
+        ctx.scopeEl.classList.remove("tts-scope-playing");
+        ctx.scopeEl.classList.add("tts-scope-loading");
+      }
+      if (ctx.statusMountEl) {
+        ctx.statusMountEl.innerHTML = `
+          <div class="tts-live-bar loading">
+            <span class="tts-spinner" aria-hidden="true"></span>
+            <span>正在合成语音讲解，请稍候…</span>
+          </div>
+        `;
+      }
+      if (ctx.segments && ctx.segments.length > 0 && ctx.segments[0].el) {
+        ctx.segments[0].el.classList.add("is-waiting");
+      }
+    }
+
+    _applyPlayingUI(ctx) {
+      if (!ctx) return;
+      if (ctx.triggerBtn) {
+        ctx.triggerBtn.classList.remove("is-loading");
+        ctx.triggerBtn.classList.add("is-playing");
+        ctx.triggerBtn.innerHTML = `<span class="tts-wave-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>停止讲解</span>`;
+      }
+      if (ctx.scopeEl) {
+        ctx.scopeEl.classList.remove("tts-scope-loading");
+        ctx.scopeEl.classList.add("tts-scope-playing");
+      }
+      if (ctx.statusMountEl) {
+        ctx.statusMountEl.innerHTML = `
+          <div class="tts-live-bar playing">
+            <span class="tts-wave-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+            <span>正在讲解 · 跟着放大的句子一起看！</span>
+            <div class="tts-mini-progress"><div class="tts-mini-progress-fill"></div></div>
+          </div>
+        `;
+      }
+      if (ctx.segments) {
+        ctx.segments.forEach((s) => {
+          if (s.el) s.el.classList.remove("is-waiting");
+        });
+      }
+    }
+
+    _clearActiveUI() {
+      if (this.rafId) {
+        cancelAnimationFrame(this.rafId);
+        this.rafId = null;
+      }
+      const ctx = this.activeContext;
+      if (!ctx) return;
+      if (ctx.triggerBtn) {
+        ctx.triggerBtn.classList.remove("is-loading", "is-playing");
+        ctx.triggerBtn.innerHTML = ctx.defaultBtnHTML || `🔊 给我讲解`;
+      }
+      if (ctx.scopeEl) {
+        ctx.scopeEl.classList.remove("tts-scope-loading", "tts-scope-playing");
+      }
+      if (ctx.statusMountEl) {
+        ctx.statusMountEl.innerHTML = "";
+      }
+      if (ctx.segments) {
+        ctx.segments.forEach((s) => {
+          if (s.el) {
+            s.el.classList.remove("is-waiting", "is-reading", "was-read", "will-read");
+          }
+        });
+      }
+      this.activeContext = null;
+    }
+
+    _startHighlightLoop() {
+      if (this.rafId) cancelAnimationFrame(this.rafId);
+      let lastActiveIdx = -1;
+
+      const tick = () => {
+        if (this.state !== "playing" || !this.activeContext) return;
+        const ctx = this.activeContext;
+
+        let elapsed = 0;
+        if (this.usingSpeechSynth && this.fallbackStartMs) {
+          elapsed = Math.max(0, (performance.now() - this.fallbackStartMs) / 1000);
+        } else if (!this.usingHtmlAudio && this.audioCtx) {
+          elapsed = Math.max(0, this.audioCtx.currentTime - this.playStartCtxTime + this.playOffsetSec);
+        } else {
+          elapsed = this.audio.currentTime || 0;
+        }
+
+        const total = Math.max(0.1, this.playDurationSec || 1);
+        const pct = Math.min(100, Math.round((elapsed / total) * 100));
+        if (ctx.statusMountEl) {
+          const fill = ctx.statusMountEl.querySelector(".tts-mini-progress-fill");
+          if (fill) fill.style.width = `${pct}%`;
+        }
+
+        const timings = ctx.timings || [];
+        if (timings.length > 0) {
+          let activeIdx = timings.findIndex((t) => elapsed >= t.start && elapsed < t.end);
+          if (activeIdx === -1) {
+            activeIdx = elapsed >= timings[timings.length - 1].start ? timings.length - 1 : 0;
+          }
+
+          if (activeIdx !== lastActiveIdx) {
+            lastActiveIdx = activeIdx;
+            timings.forEach((t, i) => {
+              if (!t.el) return;
+              const isCur = i === activeIdx;
+              t.el.classList.toggle("is-reading", isCur);
+              t.el.classList.toggle("was-read", i < activeIdx);
+              t.el.classList.toggle("will-read", i > activeIdx);
+              if (isCur && typeof t.el.scrollIntoView === "function") {
+                try {
+                  t.el.scrollIntoView({ block: "nearest", behavior: "smooth" });
+                } catch (_) {}
+              }
+            });
+          }
+        }
+
+        this.rafId = requestAnimationFrame(tick);
+      };
+
+      this.rafId = requestAnimationFrame(tick);
+    }
+
+    _finishPlayback() {
+      if (this.activeSource) {
+        try {
+          this.activeSource.onended = null;
+          this.activeSource.stop();
+          this.activeSource.disconnect();
+        } catch (_) {}
+        this.activeSource = null;
+      }
+      if (this.currentObjectUrl) {
+        URL.revokeObjectURL(this.currentObjectUrl);
+        this.currentObjectUrl = null;
+      }
+      this._clearActiveUI();
+      this.state = "idle";
+      this.currentNormText = "";
+      this._emit();
+    }
+
+    stop() {
+      this.reqToken++;
+      try {
+        this.audio.pause();
+      } catch (_) {}
+      if ("speechSynthesis" in window) {
+        try {
+          window.speechSynthesis.cancel();
+        } catch (_) {}
+      }
+      this._finishPlayback();
+    }
+
+    _collectSegments(opts, fallbackText) {
+      if (Array.isArray(opts.segments) && opts.segments.length > 0) {
+        return opts.segments;
+      }
+      if (opts.scopeEl) {
+        const nodes = Array.from(opts.scopeEl.querySelectorAll("[data-tts-seg]"));
+        if (nodes.length > 0) {
+          return nodes.map((el) => ({
+            el,
+            text: el.getAttribute("data-tts-seg") || el.textContent || ""
+          }));
+        }
+      }
+      return [{ el: opts.scopeEl || null, text: fallbackText }];
+    }
+
     async speak(rawText, options) {
       const opts = options || {};
       if (!this.enabled) return;
 
-      const key = normalizeTtsText(rawText);
+      const segments = this._collectSegments(opts, rawText);
+      const combinedRaw = rawText || segments.map((s) => s.text).join(" ");
+      const key = normalizeTtsText(combinedRaw);
       if (!key) return;
 
-      // 若点击同一句且正在播放，支持一键停止
-      if (opts.toggleIfPlaying && (this.state === "playing" || this.state === "loading") && this.currentNormText === key) {
+      // 若点击同一句且正在加载或播放，支持一键停止
+      if (
+        opts.toggleIfPlaying &&
+        (this.state === "playing" || this.state === "loading") &&
+        this.currentNormText === key
+      ) {
+        if (window.SFX) window.SFX.pop();
         this.stop();
         return;
       }
 
-      // 立即同步暂停旧播放（保持 iPad Safari 手势激活上下文！）
-      this.stop();
-      if (!this.unlocked) {
-        this.unlocked = true;
-        try {
-          this.audio.src = SILENT_WAV;
-          const up = this.audio.play();
-          if (up && typeof up.then === "function") {
-            up.then(() => {
-              if (this.state !== "playing") this.audio.pause();
-            }).catch(() => {});
-          }
-        } catch (_) {}
+      // 立即在用户点击手势内解锁 WebAudio 上下文 + 播放按键音反馈
+      this._ensureAudioContext();
+      if (window.SFX && opts.playTapSfx !== false) {
+        window.SFX.pop();
       }
+
+      this.stop();
       const myToken = ++this.reqToken;
       this.currentNormText = key;
       this.state = "loading";
+
+      this.activeContext = {
+        scopeEl: opts.scopeEl || null,
+        triggerBtn: opts.triggerBtn || null,
+        statusMountEl: opts.statusMountEl || null,
+        defaultBtnHTML: opts.defaultBtnHTML || (opts.triggerBtn ? `🔊 给我讲解` : ""),
+        segments,
+        timings: []
+      };
+
+      this._applyWaitingUI(this.activeContext);
       this._emit();
 
       try {
         const blob = await this._fetchOrLoadBlob(key);
         if (myToken !== this.reqToken || !this.enabled) return;
 
+        // 优先使用 WebAudio 解码播放（不受异步等待后的 iOS 自动播放限制，且能精确对齐静音谷）
+        let audioBuffer = this.decodedCache.get(key) || null;
+        if (!audioBuffer && this.audioCtx) {
+          try {
+            const arrBuf = await blob.arrayBuffer();
+            audioBuffer = await this._decodeAudioData(arrBuf);
+            if (audioBuffer) this.decodedCache.set(key, audioBuffer);
+          } catch (_) {
+            audioBuffer = null;
+          }
+        }
+
+        if (myToken !== this.reqToken || !this.enabled) return;
+
+        if (audioBuffer && this.audioCtx) {
+          if (this.audioCtx.state === "suspended") {
+            await this.audioCtx.resume();
+          }
+          this.usingHtmlAudio = false;
+          this.usingSpeechSynth = false;
+          this.playDurationSec = audioBuffer.duration;
+          this.playOffsetSec = 0;
+
+          if (this.activeContext) {
+            this.activeContext.timings = this._computeSegmentTimings(
+              audioBuffer,
+              this.activeContext.segments,
+              audioBuffer.duration
+            );
+          }
+
+          const src = this.audioCtx.createBufferSource();
+          src.buffer = audioBuffer;
+          src.connect(this.audioCtx.destination);
+          this.activeSource = src;
+          this.playStartCtxTime = this.audioCtx.currentTime;
+          this.state = "playing";
+
+          this._applyPlayingUI(this.activeContext);
+          this._emit();
+          this._startHighlightLoop();
+
+          src.onended = () => {
+            if (myToken === this.reqToken && this.state === "playing") {
+              this._finishPlayback();
+            }
+          };
+          src.start(0);
+          return;
+        }
+
+        // 备用降级：HTMLAudioElement
+        this.usingHtmlAudio = true;
+        this.usingSpeechSynth = false;
         const objUrl = URL.createObjectURL(blob);
         this.currentObjectUrl = objUrl;
         this.audio.src = objUrl;
+
+        await new Promise((resolve) => {
+          const onLoaded = () => {
+            this.audio.removeEventListener("loadedmetadata", onLoaded);
+            resolve();
+          };
+          this.audio.addEventListener("loadedmetadata", onLoaded);
+          setTimeout(resolve, 300);
+        });
+
+        if (myToken !== this.reqToken || !this.enabled) return;
+        const dur = Number.isFinite(this.audio.duration) && this.audio.duration > 0
+          ? this.audio.duration
+          : Math.max(2, key.length * 0.24);
+        this.playDurationSec = dur;
+
+        if (this.activeContext) {
+          this.activeContext.timings = this._computeSegmentTimings(
+            null,
+            this.activeContext.segments,
+            dur
+          );
+        }
+
         this.state = "playing";
+        this._applyPlayingUI(this.activeContext);
         this._emit();
+        this._startHighlightLoop();
         await this.audio.play();
       } catch (_) {
         if (myToken !== this.reqToken || !this.enabled) return;
-        this._finishPlayback();
-        // 离线无后端且未缓存时，优雅降级浏览器内置语音兜底
+        // 离线且未缓存时降级系统内置语音，同时维持逐句放大高亮！
         if ("speechSynthesis" in window) {
           try {
             window.speechSynthesis.cancel();
+            const estDur = Math.max(2, key.length * 0.24);
+            this.usingHtmlAudio = false;
+            this.usingSpeechSynth = true;
+            this.fallbackStartMs = performance.now();
+            this.playDurationSec = estDur;
+            if (this.activeContext) {
+              this.activeContext.timings = this._computeSegmentTimings(
+                null,
+                this.activeContext.segments,
+                estDur
+              );
+            }
             const u = new SpeechSynthesisUtterance(key);
             u.lang = "zh-CN";
             u.rate = 0.98;
             u.pitch = 1.06;
+            u.onend = () => {
+              if (myToken === this.reqToken) this._finishPlayback();
+            };
+            u.onerror = () => {
+              if (myToken === this.reqToken) this._finishPlayback();
+            };
+            this.state = "playing";
+            this._applyPlayingUI(this.activeContext);
+            this._emit();
+            this._startHighlightLoop();
             window.speechSynthesis.speak(u);
+            return;
           } catch (_) {}
         }
+        this._finishPlayback();
       }
     }
   }

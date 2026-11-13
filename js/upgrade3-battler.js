@@ -368,8 +368,6 @@
         if (window.SFX) window.SFX.pop();
       }
 
-      this.speak(out.verdict);
-
       if (this.topHP <= 0 || this.botHP <= 0) {
         this.phase = "gameover";
         if (this.botHP > 0) {
@@ -382,6 +380,13 @@
       }
 
       this.render();
+      const verdictBox = this.container ? this.container.querySelector(".clash-verdict-box") : null;
+      const statusMount = this.container ? this.container.querySelector(".clash-tts-status") : null;
+      this.speak(out.verdict, {
+        scopeEl: verdictBox,
+        statusMountEl: statusMount,
+        playTapSfx: false
+      });
     }
 
     nextRound() {
@@ -507,9 +512,10 @@
             </div>
           </div>
 
-          <div class="clash-verdict-box" style="border-color:${winBannerColor};">
+          <div class="clash-verdict-box tts-reading-scope" style="border-color:${winBannerColor};">
+            <div class="clash-tts-status"></div>
             <div style="font-weight:900;font-size:1.08rem;color:${winBannerColor};">${out.badge}</div>
-            <div style="font-weight:700;font-size:0.95rem;margin-top:4px;">${this.ruby(out.verdict)}</div>
+            <div class="tts-clauses-body" style="font-weight:700;font-size:0.95rem;margin-top:4px;line-height:1.72;">${window.DoubaoTTS && window.DoubaoTTS.renderClausesHTML ? window.DoubaoTTS.renderClausesHTML(out.verdict, this.ruby) : this.ruby(out.verdict)}</div>
             <div style="margin-top:10px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
               ${
                 this.phase === "gameover"

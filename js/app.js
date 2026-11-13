@@ -224,6 +224,20 @@
     return res;
   }
 
+  function renderClauses(str) {
+    if (window.DoubaoTTS && window.DoubaoTTS.renderClausesHTML) {
+      return window.DoubaoTTS.renderClausesHTML(str, ruby);
+    }
+    return ruby(str);
+  }
+
+  function cleanMol(str) {
+    if (window.DoubaoTTS && window.DoubaoTTS.cleanMolecule) {
+      return window.DoubaoTTS.cleanMolecule(str);
+    }
+    return str;
+  }
+
   function speak(text, opts) {
     if (!state.sound) return;
     if (window.DoubaoTTS) {
@@ -458,6 +472,8 @@
     const item = window.CATALOG_DATA.find((x) => x.id === id);
     if (!item) return;
 
+    if (window.DoubaoTTS) window.DoubaoTTS.stop();
+
     if (!state.litCards.includes(id)) {
       state.litCards.push(id);
       addStars(1);
@@ -509,18 +525,22 @@
 
     const radar = item.radar || (item.mech === "neuro" ? [92, 25, 30, 60, 80] : item.mech === "blood" ? [30, 92, 60, 50, 78] : [35, 35, 90, 65, 68]);
 
+    const spokenMol = cleanMol(item.molecule);
     const rightBox = document.getElementById("modalRightInteractive");
     rightBox.innerHTML = `
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-right:38px;">
-        <span style="font-size:2.2rem;">${item.emoji}</span>
-        <div>
-          <h2 style="margin:0;font-size:1.6rem;font-weight:900;">${ruby(item.name)}</h2>
-          <div style="color:var(--c-teal);font-weight:800;font-size:0.9rem;">🧪 武器：${ruby(item.molecule)}</div>
+      <div id="modalCardSpeechScope" class="tts-reading-scope">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding-right:38px;">
+          <span style="font-size:2.2rem;">${item.emoji}</span>
+          <div style="flex:1;min-width:180px;">
+            <h2 id="modalTitleSeg" class="tts-seg tts-header-seg" data-tts-seg="${item.name}。" style="margin:0;font-size:1.6rem;font-weight:900;">${ruby(item.name)}</h2>
+            <div id="modalWeaponSeg" class="tts-seg tts-header-seg" data-tts-seg="它的秘密武器是${spokenMol}。" style="color:var(--c-teal);font-weight:800;font-size:0.9rem;margin-top:2px;">🧪 武器：${ruby(item.molecule)}</div>
+          </div>
         </div>
-      </div>
 
-      <div class="kid-voice-bubble">
-        💬 ${ruby(item.summary)}
+        <div class="kid-voice-bubble tts-interactive-bubble" id="modalMainBubble" title="点击开始或停止讲解">
+          <div id="modalTtsStatusMount"></div>
+          <div class="tts-clauses-body">💬 ${renderClauses(item.summary)}</div>
+        </div>
       </div>
 
       <div class="mini-test-row">
@@ -549,8 +569,11 @@
         item.biochemDeep
           ? `<details style="margin-top:10px;background:var(--bg-inset);padding:10px 14px;border-radius:14px;cursor:pointer;">
                <summary style="font-weight:800;font-size:0.88rem;color:var(--c-amber);">🔎 爸爸妈妈伴读锦囊（点击展开深层原理）</summary>
-               <div style="font-size:0.88rem;color:var(--text-sub);margin-top:8px;line-height:1.55;">${ruby(item.biochemDeep)}</div>
-               <button class="mini-btn" id="btnSpeakDeep" style="margin-top:8px;font-size:0.78rem;padding:5px 12px;">🔊 豆包朗读伴读锦囊</button>
+               <div id="modalDeepSpeechScope" class="tts-reading-scope" style="margin-top:8px;">
+                 <div id="deepTtsStatusMount"></div>
+                 <div class="tts-clauses-body" style="font-size:0.92rem;color:var(--text-sub);line-height:1.72;">${renderClauses(item.biochemDeep)}</div>
+               </div>
+               <button class="mini-btn" id="btnSpeakDeep" style="margin-top:10px;font-size:0.82rem;padding:6px 14px;">🔊 给我讲解</button>
              </details>`
           : ""
       }
@@ -563,7 +586,13 @@
       btnDeep.addEventListener("click", (e) => {
         e.stopPropagation();
         if (voiceStudio) voiceStudio.stopPlayback();
-        speak(item.biochemDeep, { toggleIfPlaying: true });
+        speak(item.biochemDeep, {
+          toggleIfPlaying: true,
+          scopeEl: document.getElementById("modalDeepSpeechScope"),
+          triggerBtn: btnDeep,
+          statusMountEl: document.getElementById("deepTtsStatusMount"),
+          defaultBtnHTML: "🔊 给我讲解"
+        });
       });
     }
 
@@ -572,18 +601,18 @@
       if (fireDangerIds.has(item.id)) {
         window.SFX.bonk();
         const msg = "千万别烧！矿物一遇高温灼烧，反而会跑出剧毒的汞蒸气或砒霜烟雾！";
-        box.innerHTML = `<div class="kid-voice-bubble" style="border-color:#fb7185;background:rgba(251,113,133,0.18);">🚨 <strong>千万别烧！</strong> 矿物一遇高温灼烧，反而会跑出剧毒的汞蒸气或砒霜烟雾！</div>`;
-        speak(msg);
+        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#fb7185;background:rgba(251,113,133,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">🚨 ${renderClauses(msg)}</div></div>`;
+        speak(msg, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
       } else if (heatDestroyedIds.has(item.id)) {
         window.SFX.sizzle();
-        const msg = "咕嘟咕嘟散架啦！它是怕热的大分子蛋白质，100摄氏度彻底煮透就会变性失活！";
-        box.innerHTML = `<div class="kid-voice-bubble" style="border-color:#4ade80;background:rgba(74,222,128,0.18);">🫧✅ <strong>咕嘟咕嘟～散架啦！</strong> 它是怕热的大分子蛋白质，100°C 彻底煮透就会变性失活！（如四季豆焖熟就超安全！）</div>`;
-        speak(msg);
+        const msg = "咕嘟咕嘟散架啦！它是怕热的大分子蛋白质，100°C彻底煮透就会变性失活！（如四季豆焖熟就超安全！）";
+        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#4ade80;background:rgba(74,222,128,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">🫧✅ ${renderClauses(msg)}</div></div>`;
+        speak(msg, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
       } else {
         window.SFX.bonk();
         const msg = "沸水完全煮不烂！它的分子结构锁得像小铁笼一样结实，普通做饭温度根本拆不动它！";
-        box.innerHTML = `<div class="kid-voice-bubble" style="border-color:#fbbf24;background:rgba(251,191,36,0.18);">🫧☠️ <strong>沸水完全煮不烂！</strong> 它的分子结构锁得像小铁笼一样结实，普通做饭温度根本拆不动它！</div>`;
-        speak(msg);
+        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#fbbf24;background:rgba(251,191,36,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">🫧☠️ ${renderClauses(msg)}</div></div>`;
+        speak(msg, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
       }
     });
 
@@ -591,45 +620,38 @@
       const box = document.getElementById("toyTestResultBox");
       if (isProteinVenom) {
         window.SFX.chime();
-        const msg = "咔嚓剪碎啦！它是主动注射型蛋白毒液，必须靠毒牙或毒刺扎进血管才厉害；遇到胃蛋白酶会被剪成小段！但嘴里有小伤口仍危险，绝不能尝哦！";
-        box.innerHTML = `<div class="kid-voice-bubble" style="border-color:#4ade80;background:rgba(74,222,128,0.18);">✂️✨ <strong>咔嚓剪碎啦！</strong> 它是【🗡️主动注射型蛋白毒液】，必须靠毒牙/毒刺扎进血管才厉害；遇到胃蛋白酶会被剪成小段！（但嘴里有小伤口仍危险，绝不能尝哦！）</div>`;
-        speak(msg);
+        const msg = "咔嚓剪碎啦！它是主动注射型蛋白毒液，必须靠毒牙或毒刺扎进血管才厉害；遇到胃蛋白酶会被剪成小段！（但嘴里有小伤口仍危险，绝不能尝哦！）";
+        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#4ade80;background:rgba(74,222,128,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">✂️✨ ${renderClauses(msg)}</div></div>`;
+        speak(msg, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
       } else {
         window.SFX.bonk();
         const msg = "剪刀崩牙啦！它是小分子生物碱、糖苷或矿物，不是普通蛋白质，不怕胃酸剪刀，误食进肚子就会直接钻进血液！";
-        box.innerHTML = `<div class="kid-voice-bubble" style="border-color:#fb7185;background:rgba(251,113,133,0.18);">💥🛡️ <strong>剪刀崩牙啦！</strong> 它是【小分子生物碱/糖苷/矿物】，不是普通蛋白质，不怕胃酸剪刀，误食进肚子就会直接钻进血液！</div>`;
-        speak(msg);
+        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#fb7185;background:rgba(251,113,133,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">💥🛡️ ${renderClauses(msg)}</div></div>`;
+        speak(msg, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
       }
     });
 
     const btnSpeakCard = document.getElementById("btnSpeakCard");
-    const cardTtsText = `${item.name}。它的秘密武器是${item.molecule}。${item.summary}`;
-    const syncSpeakBtn = async () => {
-      if (!window.DoubaoTTS || !btnSpeakCard) return;
-      const st = window.DoubaoTTS.state;
-      const cur = window.DoubaoTTS.currentNormText;
-      const norm = window.DoubaoTTS.normalizeText ? window.DoubaoTTS.normalizeText(cardTtsText) : "";
-      if (cur && norm && cur === norm && st === "loading") {
-        btnSpeakCard.textContent = "⏳ 豆包合成中…";
-      } else if (cur && norm && cur === norm && st === "playing") {
-        btnSpeakCard.textContent = "⏹️ 停止朗读";
-      } else {
-        const cached = await window.DoubaoTTS.hasCachedLocal(cardTtsText);
-        btnSpeakCard.textContent = cached ? "🔊 豆包姐姐讲给我听 ⚡已缓存" : "🔊 豆包姐姐讲给我听！";
-      }
-    };
-    syncSpeakBtn();
-    if (unsubscribeModalTts) unsubscribeModalTts();
-    if (window.DoubaoTTS) {
-      unsubscribeModalTts = window.DoubaoTTS.onStatus(() => {
-        syncSpeakBtn();
-      });
-    }
+    btnSpeakCard.classList.remove("is-loading", "is-playing");
+    btnSpeakCard.innerHTML = "🔊 给我讲解";
 
-    btnSpeakCard.onclick = () => {
+    const cardTtsText = `${item.name}。它的秘密武器是${spokenMol}。${item.summary}`;
+    const triggerMainCardSpeech = () => {
       if (voiceStudio) voiceStudio.stopPlayback();
-      speak(cardTtsText, { toggleIfPlaying: true });
+      speak(cardTtsText, {
+        toggleIfPlaying: true,
+        scopeEl: document.getElementById("modalCardSpeechScope"),
+        triggerBtn: btnSpeakCard,
+        statusMountEl: document.getElementById("modalTtsStatusMount"),
+        defaultBtnHTML: "🔊 给我讲解"
+      });
     };
+
+    btnSpeakCard.onclick = triggerMainCardSpeech;
+    const mainBubbleEl = document.getElementById("modalMainBubble");
+    if (mainBubbleEl) {
+      mainBubbleEl.onclick = triggerMainCardSpeech;
+    }
   }
 
   function renderPowerBar(label, val, color) {
@@ -683,15 +705,20 @@
     cellPlayground = new window.PlaygroundEngines.LivingCellPlayground(canvas, (heartIcon, bpmText, speech) => {
       document.getElementById("hudHeartIcon").textContent = heartIcon;
       document.getElementById("hudBpmText").textContent = bpmText;
-      document.getElementById("cellSpeechToast").textContent = speech;
-      speak(speech);
+      const toastEl = document.getElementById("cellSpeechToast");
+      toastEl.innerHTML = renderClauses(speech);
+      speak(speech, { scopeEl: toastEl, playTapSfx: false });
     });
 
     document.querySelectorAll(".speech-toast").forEach((toastEl) => {
       toastEl.style.cursor = "pointer";
-      toastEl.title = "点击让豆包姐姐朗读提示";
+      toastEl.title = "点击给我讲解";
       toastEl.addEventListener("click", () => {
-        if (toastEl.textContent) speak(toastEl.textContent, { toggleIfPlaying: true });
+        const raw = toastEl.textContent;
+        if (raw) {
+          toastEl.innerHTML = renderClauses(raw);
+          speak(raw, { toggleIfPlaying: true, scopeEl: toastEl });
+        }
       });
     });
 
@@ -1028,7 +1055,7 @@
       <div id="clinicStep2Area">
         ${
           cured
-            ? `<div class="kid-voice-bubble" style="border-color:#4ade80;">🎉 ${ruby(p.winSpeech)}</div>`
+            ? `<div class="kid-voice-bubble tts-reading-scope" id="clinicWinBubble" style="border-color:#4ade80;"><div id="clinicTtsStatus"></div><div class="tts-clauses-body">🎉 ${renderClauses(p.winSpeech)}</div></div>`
             : state.pickedBottle === p.rightId
               ? renderDoseDialHTML(p)
               : state.pickedBottle
@@ -1074,8 +1101,12 @@
           state.curedIds.push(p.id);
           addStars(3);
         }
-        speak(p.winSpeech);
         renderClinic();
+        speak(p.winSpeech, {
+          scopeEl: document.getElementById("clinicWinBubble"),
+          statusMountEl: document.getElementById("clinicTtsStatus"),
+          playTapSfx: false
+        });
       });
     }
   }
@@ -1224,8 +1255,9 @@
         const msg = sceneDone
           ? `👑 本关 ${curScene.targets.length} 处全找齐啦！（再点一次绿色圈圈还能看它的 3D 分子闪卡哦！）`
           : target.tip;
-        document.getElementById("huntToast").textContent = msg;
-        speak(target.tip);
+        const huntToastEl = document.getElementById("huntToast");
+        huntToastEl.innerHTML = renderClauses(msg);
+        speak(target.tip, { scopeEl: huntToastEl, playTapSfx: false });
       });
     });
   }
