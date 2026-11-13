@@ -1,5 +1,5 @@
 // 奇妙毒物科学游乐园 Service Worker (iPad 离线秒开 & 海外实拍图极速缓存)
-const CACHE_NAME = "duwu-playground-v3.6";
+const CACHE_NAME = "duwu-playground-v3.7";
 const CORE_SHELL = [
   "./",
   "./index.html",
@@ -7,6 +7,7 @@ const CORE_SHELL = [
   "./css/styles.css",
   "./js/data-catalog.js",
   "./js/data-bilingual.js",
+  "./js/data-tts-manifest.js",
   "./js/data-photos.js",
   "./js/data-molecules3d.js",
   "./js/data-labs.js",

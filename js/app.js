@@ -686,6 +686,14 @@
         });
       }
     }
+
+    // 打开卡片瞬间后台预加载并解码本卡内置语音，点「🔊 给我讲解」0毫秒直接出声音！
+    if (window.DoubaoTTS && window.DoubaoTTS.preloadScope) {
+      window.DoubaoTTS.preloadScope(document.getElementById("modalCardSpeechScope"));
+      if (bilingual) {
+        window.DoubaoTTS.preloadText(`${bilingual.en} ${bilingual.en} ${bilingual.zh}`);
+      }
+    }
   }
 
   function renderPowerBar(label, val, color) {

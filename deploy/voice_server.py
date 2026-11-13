@@ -99,7 +99,8 @@ def normalize_tts_text(raw: str) -> str:
     s = s.replace("+1❤️", "加1颗红心").replace("+1 ❤️", "加1颗红心")
     s = s.replace("°C", "摄氏度").replace("mmHg", "毫米汞柱").replace("BPM", "次每分钟")
     s = EMOJI_STRIP_RE.sub(" ", s)
-    s = re.sub(r"\s+", " ", s).strip()
+    s = re.sub(r"\s+", " ", s)
+    s = re.sub(r"([。！？；，、：”』」）》])\s+", r"\1", s).strip()
     return s[:TTS_MAX_CHARS]
 
 

@@ -20,6 +20,7 @@
       .replace(/BPM/g, "次每分钟")
       .replace(EMOJI_RE, " ")
       .replace(/\s+/g, " ")
+      .replace(/([。！？；，、：”』」）》])\s+/g, "$1")
       .trim()
       .slice(0, 600);
   }
@@ -364,6 +365,23 @@
       }
 
       const p = (async () => {
+        // 1. 优先从内置预生成的本地静态语音包 (assets/tts/*.mp3) 秒级加载，直接出声音！
+        const prebuiltUrl = window.TTS_PREBUILT_MAP && window.TTS_PREBUILT_MAP[key];
+        if (prebuiltUrl) {
+          try {
+            const staticRes = await fetch(`./${prebuiltUrl}`);
+            if (staticRes.ok) {
+              const staticBlob = await staticRes.blob();
+              if (staticBlob && staticBlob.size > 400) {
+                this.memCache.set(key, staticBlob);
+                this._saveToIDB(key, staticBlob);
+                return staticBlob;
+              }
+            }
+          } catch (_) {}
+        }
+
+        // 2. 动态文本（如随时互动 AI 回答）走服务端缓存/实时合成接口
         const res = await fetch(`./api/tts?t=${encodeURIComponent(key)}`);
         if (!res.ok) {
           throw new Error(`tts_http_${res.status}`);
@@ -385,6 +403,26 @@
 
       this.inflight.set(key, p);
       return p;
+    }
+
+    async preloadText(rawText) {
+      const key = normalizeTtsText(rawText);
+      if (!key) return;
+      try {
+        const blob = await this._fetchOrLoadBlob(key);
+        if (blob && this.audioCtx && !this.decodedCache.has(key)) {
+          const arrBuf = await blob.arrayBuffer();
+          const decoded = await this._decodeAudioData(arrBuf);
+          if (decoded) this.decodedCache.set(key, decoded);
+        }
+      } catch (_) {}
+    }
+
+    preloadScope(scopeEl) {
+      if (!scopeEl) return;
+      const segs = this._collectSegments({ scopeEl }, "");
+      const combined = segs.map((s) => s.text).join(" ");
+      this.preloadText(combined);
     }
 
     // 结合字数标点权重 + 真实音频波形静音谷（换气停顿点）计算每一句的精确起止时间！
@@ -704,23 +742,42 @@
         timings: []
       };
 
-      this._applyWaitingUI(this.activeContext);
+      const isPrebuiltOrCached =
+        this.decodedCache.has(key) ||
+        this.memCache.has(key) ||
+        Boolean(window.TTS_PREBUILT_MAP && window.TTS_PREBUILT_MAP[key]);
+
+      let waitTimer = null;
+      if (!isPrebuiltOrCached) {
+        this._applyWaitingUI(this.activeContext);
+      } else {
+        waitTimer = setTimeout(() => {
+          if (myToken === this.reqToken && this.state === "loading") {
+            this._applyWaitingUI(this.activeContext);
+          }
+        }, 140);
+      }
       this._emit();
 
       try {
-        const blob = await this._fetchOrLoadBlob(key);
-        if (myToken !== this.reqToken || !this.enabled) return;
-
-        // 优先使用 WebAudio 解码播放（不受异步等待后的 iOS 自动播放限制，且能精确对齐静音谷）
         let audioBuffer = this.decodedCache.get(key) || null;
-        if (!audioBuffer && this.audioCtx) {
-          try {
-            const arrBuf = await blob.arrayBuffer();
-            audioBuffer = await this._decodeAudioData(arrBuf);
-            if (audioBuffer) this.decodedCache.set(key, audioBuffer);
-          } catch (_) {
-            audioBuffer = null;
+        let blob = null;
+        if (!audioBuffer) {
+          blob = await this._fetchOrLoadBlob(key);
+          if (myToken !== this.reqToken || !this.enabled) return;
+          if (this.audioCtx) {
+            try {
+              const arrBuf = await blob.arrayBuffer();
+              audioBuffer = await this._decodeAudioData(arrBuf);
+              if (audioBuffer) this.decodedCache.set(key, audioBuffer);
+            } catch (_) {
+              audioBuffer = null;
+            }
           }
+        }
+        if (waitTimer) {
+          clearTimeout(waitTimer);
+          waitTimer = null;
         }
 
         if (myToken !== this.reqToken || !this.enabled) return;
