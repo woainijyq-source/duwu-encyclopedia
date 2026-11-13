@@ -308,6 +308,31 @@
       syncThemeTxt();
       saveState();
     });
+
+    const btnIntroVideo = document.getElementById("btnIntroVideo");
+    const introModal = document.getElementById("introVideoModal");
+    const introPlayer = document.getElementById("introVideoPlayer");
+    const btnCloseIntro = document.getElementById("btnCloseIntroVideo");
+    if (btnIntroVideo && introModal && introPlayer) {
+      const closeIntro = () => {
+        try { introPlayer.pause(); } catch (_) {}
+        introModal.classList.remove("open");
+      };
+      btnIntroVideo.addEventListener("click", () => {
+        if (window.SFX) window.SFX.pop();
+        if (window.DoubaoTTS) window.DoubaoTTS.stop();
+        if (voiceStudio) voiceStudio.stopPlayback();
+        introModal.classList.add("open");
+        try {
+          introPlayer.currentTime = 0;
+          introPlayer.play();
+        } catch (_) {}
+      });
+      if (btnCloseIntro) btnCloseIntro.addEventListener("click", closeIntro);
+      introModal.addEventListener("click", (e) => {
+        if (e.target === introModal) closeIntro();
+      });
+    }
   }
 
   function switchStage(st) {

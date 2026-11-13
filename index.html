@@ -31,6 +31,7 @@
       </nav>
 
       <div class="utility-pills">
+        <button class="mini-btn on" id="btnIntroVideo" title="观看项目介绍视频">🎬 介绍视频</button>
         <div class="star-counter" id="starCounter">⭐ 0</div>
         <button class="mini-btn on" id="btnSound" title="音效开关">🔊 音效</button>
         <button class="mini-btn on" id="btnPinyin" title="生僻字拼音开关">🔤 拼音</button>
@@ -258,6 +259,24 @@
         <!-- 右半边：零长文！一句话气泡 + 沸水锅按钮 + 胃酸剪刀按钮 + 威力视觉条 -->
         <div id="modalRightInteractive"></div>
       </div>
+    </div>
+  </div>
+
+  <!-- 项目介绍视频弹窗 -->
+  <div class="card-modal-backdrop" id="introVideoModal" role="dialog" aria-modal="true">
+    <div class="super-card-modal" style="max-width:860px;padding:18px 20px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-size:1.15rem;font-weight:900;color:var(--c-teal);">🎬 《奇妙毒物科学游乐园》项目介绍视频</div>
+        <button class="close-circle-btn" id="btnCloseIntroVideo" aria-label="关闭视频" style="position:static;width:38px;height:38px;">✕</button>
+      </div>
+      <video
+        id="introVideoPlayer"
+        src="assets/intro_video.mp4"
+        controls
+        playsinline
+        preload="metadata"
+        style="width:100%;border-radius:18px;border:2px solid var(--border-light);background:#000;display:block;"
+      ></video>
     </div>
   </div>
 
