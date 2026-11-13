@@ -178,6 +178,8 @@
   let ecoSandbox = null;
   let cardBattler = null;
   let voiceStudio = null;
+  let aiCompanion = null;
+  let currentOpenCard = null;
   let unsubscribeModalTts = null;
 
   function loadState() {
@@ -224,9 +226,9 @@
     return res;
   }
 
-  function renderClauses(str) {
+  function renderClauses(str, bilingualObj) {
     if (window.DoubaoTTS && window.DoubaoTTS.renderClausesHTML) {
-      return window.DoubaoTTS.renderClausesHTML(str, ruby);
+      return window.DoubaoTTS.renderClausesHTML(str, ruby, bilingualObj);
     }
     return ruby(str);
   }
@@ -472,6 +474,7 @@
     const item = window.CATALOG_DATA.find((x) => x.id === id);
     if (!item) return;
 
+    currentOpenCard = item;
     if (window.DoubaoTTS) window.DoubaoTTS.stop();
 
     if (!state.litCards.includes(id)) {
@@ -526,6 +529,7 @@
     const radar = item.radar || (item.mech === "neuro" ? [92, 25, 30, 60, 80] : item.mech === "blood" ? [30, 92, 60, 50, 78] : [35, 35, 90, 65, 68]);
 
     const spokenMol = cleanMol(item.molecule);
+    const bilingual = (window.BILINGUAL_NOTES && window.BILINGUAL_NOTES[item.id]) || null;
     const rightBox = document.getElementById("modalRightInteractive");
     rightBox.innerHTML = `
       <div id="modalCardSpeechScope" class="tts-reading-scope">
@@ -539,7 +543,7 @@
 
         <div class="kid-voice-bubble tts-interactive-bubble" id="modalMainBubble" title="点击开始或停止讲解">
           <div id="modalTtsStatusMount"></div>
-          <div class="tts-clauses-body">💬 ${renderClauses(item.summary)}</div>
+          <div class="tts-clauses-body">💬 ${renderClauses(item.summary, bilingual)}</div>
         </div>
       </div>
 
@@ -586,7 +590,7 @@
       btnDeep.addEventListener("click", (e) => {
         e.stopPropagation();
         if (voiceStudio) voiceStudio.stopPlayback();
-        speak(item.biochemDeep, {
+        speak(null, {
           toggleIfPlaying: true,
           scopeEl: document.getElementById("modalDeepSpeechScope"),
           triggerBtn: btnDeep,
@@ -601,18 +605,21 @@
       if (fireDangerIds.has(item.id)) {
         window.SFX.bonk();
         const msg = "千万别烧！矿物一遇高温灼烧，反而会跑出剧毒的汞蒸气或砒霜烟雾！";
-        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#fb7185;background:rgba(251,113,133,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">🚨 ${renderClauses(msg)}</div></div>`;
-        speak(msg, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
+        const biTest = { en: "Never put this rock in a fire!", zh: "千万别把这块矿石放进火里烧！", pos: "end" };
+        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#fb7185;background:rgba(251,113,133,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">🚨 ${renderClauses(msg, biTest)}</div></div>`;
+        speak(null, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
       } else if (heatDestroyedIds.has(item.id)) {
         window.SFX.sizzle();
         const msg = "咕嘟咕嘟散架啦！它是怕热的大分子蛋白质，100°C彻底煮透就会变性失活！（如四季豆焖熟就超安全！）";
-        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#4ade80;background:rgba(74,222,128,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">🫧✅ ${renderClauses(msg)}</div></div>`;
-        speak(msg, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
+        const biTest = { en: "High heat breaks the big protein!", zh: "高温能把大蛋白煮散架！", pos: "mid" };
+        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#4ade80;background:rgba(74,222,128,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">🫧✅ ${renderClauses(msg, biTest)}</div></div>`;
+        speak(null, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
       } else {
         window.SFX.bonk();
         const msg = "沸水完全煮不烂！它的分子结构锁得像小铁笼一样结实，普通做饭温度根本拆不动它！";
-        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#fbbf24;background:rgba(251,191,36,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">🫧☠️ ${renderClauses(msg)}</div></div>`;
-        speak(msg, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
+        const biTest = { en: "Boiling water cannot break it!", zh: "沸水也煮不烂它！", pos: "mid" };
+        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#fbbf24;background:rgba(251,191,36,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">🫧☠️ ${renderClauses(msg, biTest)}</div></div>`;
+        speak(null, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
       }
     });
 
@@ -621,13 +628,15 @@
       if (isProteinVenom) {
         window.SFX.chime();
         const msg = "咔嚓剪碎啦！它是主动注射型蛋白毒液，必须靠毒牙或毒刺扎进血管才厉害；遇到胃蛋白酶会被剪成小段！（但嘴里有小伤口仍危险，绝不能尝哦！）";
-        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#4ade80;background:rgba(74,222,128,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">✂️✨ ${renderClauses(msg)}</div></div>`;
-        speak(msg, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
+        const biTest = { en: "Stomach enzymes cut it into pieces!", zh: "胃里的酶剪刀能把它剪成小段！", pos: "mid" };
+        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#4ade80;background:rgba(74,222,128,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">✂️✨ ${renderClauses(msg, biTest)}</div></div>`;
+        speak(null, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
       } else {
         window.SFX.bonk();
         const msg = "剪刀崩牙啦！它是小分子生物碱、糖苷或矿物，不是普通蛋白质，不怕胃酸剪刀，误食进肚子就会直接钻进血液！";
-        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#fb7185;background:rgba(251,113,133,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">💥🛡️ ${renderClauses(msg)}</div></div>`;
-        speak(msg, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
+        const biTest = { en: "It is too small for the scissors!", zh: "它个头太小，蛋白酶剪刀剪不动！", pos: "mid" };
+        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#fb7185;background:rgba(251,113,133,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">💥🛡️ ${renderClauses(msg, biTest)}</div></div>`;
+        speak(null, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
       }
     });
 
@@ -635,10 +644,19 @@
     btnSpeakCard.classList.remove("is-loading", "is-playing");
     btnSpeakCard.innerHTML = "🔊 给我讲解";
 
-    const cardTtsText = `${item.name}。它的秘密武器是${spokenMol}。${item.summary}`;
+    const btnAskCardAI = document.getElementById("btnAskCardAI");
+    if (btnAskCardAI) {
+      btnAskCardAI.onclick = () => {
+        if (window.SFX) window.SFX.pop();
+        if (aiCompanion) {
+          aiCompanion.open(item, { autoListen: true });
+        }
+      };
+    }
+
     const triggerMainCardSpeech = () => {
       if (voiceStudio) voiceStudio.stopPlayback();
-      speak(cardTtsText, {
+      speak(null, {
         toggleIfPlaying: true,
         scopeEl: document.getElementById("modalCardSpeechScope"),
         triggerBtn: btnSpeakCard,
@@ -651,6 +669,22 @@
     const mainBubbleEl = document.getElementById("modalMainBubble");
     if (mainBubbleEl) {
       mainBubbleEl.onclick = triggerMainCardSpeech;
+      // 支持单点双语胶囊单独跟读那句英文
+      const biClauseEl = mainBubbleEl.querySelector(".tts-bilingual-clause");
+      if (biClauseEl) {
+        biClauseEl.addEventListener("click", (e) => {
+          if (window.DoubaoTTS && window.DoubaoTTS.state !== "idle") return;
+          e.stopPropagation();
+          if (voiceStudio) voiceStudio.stopPlayback();
+          const segText = biClauseEl.getAttribute("data-tts-seg") || "";
+          speak(segText, {
+            toggleIfPlaying: true,
+            segments: [{ el: biClauseEl, text: segText }],
+            scopeEl: document.getElementById("modalCardSpeechScope"),
+            statusMountEl: document.getElementById("modalTtsStatusMount")
+          });
+        });
+      }
     }
   }
 
@@ -678,6 +712,7 @@
     });
 
     const close = () => {
+      currentOpenCard = null;
       if (unsubscribeModalTts) {
         unsubscribeModalTts();
         unsubscribeModalTts = null;
@@ -1344,6 +1379,15 @@
     initSuperModalEvents();
     initWorldStage();
     initVoiceStudio();
+    if (window.InteractiveAICompanion) {
+      aiCompanion = new window.InteractiveAICompanion({
+        ruby,
+        getCurrentCard: () => currentOpenCard,
+        onStopOtherAudio: () => {
+          if (voiceStudio) voiceStudio.stopPlayback();
+        }
+      });
+    }
     initBioLabStage();
     initPharmacyStage();
     initDetectiveStage();

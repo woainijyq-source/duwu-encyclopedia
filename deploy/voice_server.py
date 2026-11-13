@@ -62,9 +62,16 @@ VOLC_TTS_TONE = os.environ.get(
     "请用温柔、生动、充满好奇心的科普姐姐语气，像给8岁小朋友讲自然故事一样吐字清楚地说。",
 ).strip()
 
-TTS_MAX_CHARS = 260
+# DOUDOU New API (DeepSeek) configuration for anytime interactive Q&A (loaded from env / tts.env)
+AI_BASE = (os.environ.get("AI_BASE") or "https://doudou-newapi.com").strip().rstrip("/")
+AI_KEY = (os.environ.get("AI_KEY") or "").strip()
+AI_MODEL = (os.environ.get("AI_MODEL") or "DeepSeek-V4.1-Flash").strip()
+
+TTS_MAX_CHARS = 500
 TTS_PER_IP_HOUR = int(os.environ.get("TTS_PER_IP_HOUR", "240"))
 TTS_PER_DAY = int(os.environ.get("TTS_PER_DAY", "1500"))
+CHAT_PER_IP_HOUR = int(os.environ.get("CHAT_PER_IP_HOUR", "120"))
+CHAT_PER_DAY = int(os.environ.get("CHAT_PER_DAY", "600"))
 STRICT_ORIGIN = os.environ.get("DUWU_STRICT_ORIGIN", "1") == "1"
 
 # Emoji & decorative symbol stripper so Doubao reads pure natural Chinese/science terms
@@ -77,7 +84,9 @@ _global_lock = threading.Lock()
 _inflight_locks: dict[str, threading.Lock] = {}
 _ip_hourly: dict[str, list[float]] = {}
 _daily_counter = {"day": "", "count": 0}
-_stats = {"hits": 0, "misses": 0, "errors": 0}
+_chat_ip_hourly: dict[str, list[float]] = {}
+_chat_daily_counter = {"day": "", "count": 0}
+_stats = {"hits": 0, "misses": 0, "errors": 0, "chats": 0}
 
 
 def ensure_dirs():
@@ -208,6 +217,104 @@ def synthesize_doubao_mp3(clean_text: str) -> bytes:
     if not is_valid_mp3(mp3_bytes):
         raise RuntimeError("invalid_mp3_output")
     return mp3_bytes
+
+
+def check_chat_quota(client_ip: str) -> str | None:
+    now = time.time()
+    day = time.strftime("%Y-%m-%d", time.gmtime(now))
+    with _global_lock:
+        if _chat_daily_counter["day"] != day:
+            _chat_daily_counter["day"] = day
+            _chat_daily_counter["count"] = 0
+        if _chat_daily_counter["count"] >= CHAT_PER_DAY:
+            return "daily_chat_quota_reached"
+
+        bucket = [t for t in _chat_ip_hourly.get(client_ip, []) if now - t < 3600]
+        if len(bucket) >= CHAT_PER_IP_HOUR:
+            _chat_ip_hourly[client_ip] = bucket
+            return "hourly_chat_ip_quota_reached"
+
+        bucket.append(now)
+        _chat_ip_hourly[client_ip] = bucket
+        _chat_daily_counter["count"] += 1
+    return None
+
+
+def call_deepseek_chat(question: str, card: dict | None, history: list | None) -> str:
+    if not AI_KEY:
+        raise RuntimeError("ai_key_not_configured")
+
+    sys_lines = [
+        "你是《奇妙毒物科学游乐园》里的百科语音互动伙伴，正在跟一位聪明好奇的8岁小女孩实时对话。",
+        "请严格遵守以下规则：",
+        "1. 语气温暖亲切、充满童趣和科学好奇心，直接回答孩子的问题。",
+        "2. 回答必须简短好听，控制在 55 到 115 个汉字之间（2到3句话），适合直接语音朗读，绝不长篇大论。",
+        "3. 在回答中自然穿插 1 句简单地道、适合8岁孩子跟读的英文短句（4~8个单词，以英文句号或感叹号结尾），并紧跟中文意思。",
+        "4. 只输出纯文本句子，严禁使用 Markdown 星号(*)、井号(#)、列表符号或表情符号。",
+    ]
+
+    if isinstance(card, dict) and card.get("name"):
+        c_name = str(card.get("name") or "")[:40]
+        c_mol = str(card.get("molecule") or "")[:80]
+        c_sum = str(card.get("summary") or "")[:240]
+        c_deep = str(card.get("biochemDeep") or "")[:240]
+        c_en = str(card.get("en") or "")[:100]
+        c_zh = str(card.get("zh") or "")[:100]
+        sys_lines.append(
+            f"当前孩子正在看的百科卡片是：【{c_name}】，秘密武器分子：{c_mol}。"
+            f"卡片讲解：{c_sum} "
+            + (f"深层原理：{c_deep} " if c_deep else "")
+            + (f"卡片精选英语短句：{c_en} ({c_zh})" if c_en else "")
+        )
+
+    messages: list[dict[str, str]] = [{"role": "system", "content": "\n".join(sys_lines)}]
+
+    if isinstance(history, list):
+        for turn in history[-4:]:
+            if not isinstance(turn, dict):
+                continue
+            r = turn.get("role")
+            c = str(turn.get("content") or "").strip()[:220]
+            if r in ("user", "assistant") and c:
+                messages.append({"role": r, "content": c})
+
+    messages.append({"role": "user", "content": question.strip()[:200]})
+
+    payload = {
+        "model": AI_MODEL,
+        "messages": messages,
+        "temperature": 0.65,
+        "max_tokens": 260,
+        "stream": False,
+    }
+
+    req = urllib.request.Request(
+        f"{AI_BASE}/v1/chat/completions",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {AI_KEY}",
+            "Content-Type": "application/json",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) DuwuEncyclopedia/3.5",
+        },
+        method="POST",
+    )
+
+    with urllib.request.urlopen(req, timeout=22) as resp:
+        raw_body = resp.read().decode("utf-8")
+
+    data = json.loads(raw_body)
+    choices = data.get("choices") or []
+    if not choices:
+        raise RuntimeError("empty_chat_choices")
+
+    content = (choices[0].get("message") or {}).get("content") or ""
+    content = re.sub(r"<think>[\s\S]*?</think>", "", content, flags=re.I)
+    content = re.sub(r"[*_#`~>]+", "", content)
+    content = EMOJI_STRIP_RE.sub("", content)
+    content = re.sub(r"\s+", " ", content).strip()
+    if not content:
+        raise RuntimeError("empty_chat_reply")
+    return content[:320]
 
 
 def clean_mime(raw: str) -> str:
@@ -359,6 +466,36 @@ class DuwuVoiceAndTTSHandler(BaseHTTPRequestHandler):
             lk.release()
             release_key_lock(key, lk)
 
+    def do_HEAD(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.end_headers()
+
+    def _handle_chat(self, body: dict):
+        question = str(body.get("question") or "").strip()
+        if not question:
+            return self._send_json(400, {"ok": False, "error": "empty_question"})
+        if not AI_KEY:
+            return self._send_json(503, {"ok": False, "error": "ai_not_configured"})
+        if not self._allowed_origin():
+            return self._send_json(403, {"ok": False, "error": "forbidden_origin"})
+
+        quota_err = check_chat_quota(self._client_ip())
+        if quota_err:
+            return self._send_json(429, {"ok": False, "error": quota_err})
+
+        card = body.get("card") if isinstance(body.get("card"), dict) else None
+        history = body.get("history") if isinstance(body.get("history"), list) else None
+        try:
+            reply = call_deepseek_chat(question, card, history)
+            with _global_lock:
+                _stats["chats"] += 1
+            return self._send_json(200, {"ok": True, "reply": reply, "model": AI_MODEL})
+        except Exception as exc:
+            with _global_lock:
+                _stats["errors"] += 1
+            return self._send_json(502, {"ok": False, "error": "chat_failed", "detail": str(exc)[:140]})
+
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/")
@@ -373,10 +510,13 @@ class DuwuVoiceAndTTSHandler(BaseHTTPRequestHandler):
                 "ok": True,
                 "configured": bool(VOLC_TTS_KEY),
                 "speaker": VOLC_TTS_SPEAKER,
+                "aiConfigured": bool(AI_KEY),
+                "aiModel": AI_MODEL,
                 "cachedFiles": len(files),
                 "cachedMB": round(total_bytes / 1048576, 2),
                 "hits": snap["hits"],
                 "misses": snap["misses"],
+                "chats": snap["chats"],
                 "errors": snap["errors"],
             })
 
@@ -434,6 +574,16 @@ class DuwuVoiceAndTTSHandler(BaseHTTPRequestHandler):
             except Exception:
                 return self._send_json(400, {"ok": False, "error": "invalid_json"})
             return self._handle_tts(text)
+
+        if path == "/api/chat":
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            if length <= 0 or length > 16384:
+                return self._send_json(400, {"ok": False, "error": "invalid_body"})
+            try:
+                body = json.loads(self.rfile.read(length).decode("utf-8"))
+            except Exception:
+                return self._send_json(400, {"ok": False, "error": "invalid_json"})
+            return self._handle_chat(body)
 
         if not path.startswith("/api/recordings/"):
             return self._send_json(404, {"ok": False, "error": "route_not_found"})

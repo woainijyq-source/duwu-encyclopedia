@@ -21,7 +21,7 @@
       .replace(EMOJI_RE, " ")
       .replace(/\s+/g, " ")
       .trim()
-      .slice(0, 260);
+      .slice(0, 500);
   }
 
   function cleanMoleculeForSpeech(mol) {
@@ -36,20 +36,28 @@
   function splitIntoClauses(text) {
     const str = String(text || "").trim();
     if (!str) return [];
-    const raw = str.match(/[^。！？；，：]+(?:[。！？；，：”』」）》]+|$)/g) || [str];
+    const raw =
+      str.match(/(?:[0-9]+\.[0-9]+|[^。！？；，：.!?])+(?:[。！？；，：”』」）》]+|[.!?]+(?=\s|$)|$)/g) || [
+        str
+      ];
     const merged = [];
     let buf = "";
     for (const part of raw) {
       buf += part;
-      const pureLen = buf.replace(/[『』「」【】（）()《》“”\s，。！？；：、]/g, "").length;
-      if (pureLen >= 7 || /[。！？；]$/.test(buf.trim())) {
-        merged.push(buf);
+      const hasMultiEnWords = /[A-Za-z]{2,}\s+[A-Za-z]{2,}/.test(buf);
+      const pureLen = buf.replace(/[『』「」【】（）()《》“”\s，。！？；：、.!?]/g, "").length;
+      if (
+        hasMultiEnWords ||
+        pureLen >= 7 ||
+        /[。！？；.!?]$/.test(buf.trim())
+      ) {
+        merged.push(buf.trim());
         buf = "";
       }
     }
-    if (buf) {
+    if (buf.trim()) {
       if (merged.length > 0) merged[merged.length - 1] += buf;
-      else merged.push(buf);
+      else merged.push(buf.trim());
     }
     return merged;
   }
@@ -62,15 +70,38 @@
       .replace(/>/g, "&gt;");
   }
 
-  function renderClausesHTML(text, rubyFn) {
+  function renderClausesHTML(text, rubyFn, bilingualObj) {
     const clauses = splitIntoClauses(text);
     const rFn = typeof rubyFn === "function" ? rubyFn : (x) => x;
-    return clauses
-      .map(
-        (c, idx) =>
-          `<span class="tts-seg tts-clause" data-tts-seg="${escapeAttr(c)}" data-clause-idx="${idx}">${rFn(c)}</span>`
-      )
-      .join("");
+
+    const formatClauseContent = (c) => {
+      if (/[A-Za-z]{2,}\s+[A-Za-z]{2,}/.test(c)) {
+        return `<span class="inline-en-badge">🇬🇧</span> ${rFn(c)}`;
+      }
+      return rFn(c);
+    };
+
+    const items = clauses.map((c, idx) => {
+      const hasEn = /[A-Za-z]{2,}\s+[A-Za-z]{2,}/.test(c);
+      return `<span class="tts-seg tts-clause ${hasEn ? "tts-clause-inline-en" : ""}" data-tts-seg="${escapeAttr(c)}" data-clause-idx="${idx}">${formatClauseContent(c)}</span>`;
+    });
+
+    if (bilingualObj && bilingualObj.en && bilingualObj.zh) {
+      const spokenPair = `${bilingualObj.en} ${bilingualObj.zh}`;
+      const bilingualHTML = `
+        <span class="tts-seg tts-clause tts-bilingual-clause" data-tts-seg="${escapeAttr(spokenPair)}" data-bilingual-en="${escapeAttr(bilingualObj.en)}" title="点击可单独跟读这句英语">
+          <span class="bilingual-tag">🇬🇧 顺便学英文</span>
+          <span class="bilingual-en">${escapeAttr(bilingualObj.en)}</span>
+          <span class="bilingual-zh">${rFn(bilingualObj.zh)}</span>
+        </span>
+      `.trim();
+
+      const insertIdx =
+        bilingualObj.pos === "mid" && items.length >= 2 ? 1 : items.length;
+      items.splice(insertIdx, 0, bilingualHTML);
+    }
+
+    return items.join("");
   }
 
   function calcSegmentWeight(rawSegText) {
@@ -79,13 +110,18 @@
     if (!norm) return 1.5;
 
     let w = 0;
-    for (const ch of norm) {
-      if (/[\u4e00-\u9fff]/.test(ch)) w += 1.0;
-      else if (/[A-Za-z0-9]/.test(ch)) w += 0.45;
-      else w += 0.2;
+    const enWords = norm.match(/[A-Za-z]+(?:'[A-Za-z]+)?/g) || [];
+    for (const word of enWords) {
+      w += Math.max(1.38, word.length * 0.34);
     }
-    const majorStops = (raw.match(/[。！？；…]/g) || []).length;
-    const minorStops = (raw.match(/[，、：—]/g) || []).length;
+    const withoutEn = norm.replace(/[A-Za-z]+(?:'[A-Za-z]+)?/g, "");
+    for (const ch of withoutEn) {
+      if (/[\u4e00-\u9fff]/.test(ch)) w += 1.0;
+      else if (/[0-9]/.test(ch)) w += 0.55;
+      else w += 0.16;
+    }
+    const majorStops = (raw.match(/[。！？；…!?]|\.(?=\s|$)/g) || []).length;
+    const minorStops = (raw.match(/[，、：—,:;]/g) || []).length;
     w += majorStops * 2.1 + minorStops * 1.15;
     return Math.max(1.8, w);
   }
@@ -142,8 +178,8 @@
       return splitIntoClauses(text);
     }
 
-    renderClausesHTML(text, rubyFn) {
-      return renderClausesHTML(text, rubyFn);
+    renderClausesHTML(text, rubyFn, bilingualObj) {
+      return renderClausesHTML(text, rubyFn, bilingualObj);
     }
 
     onStatus(fn) {
@@ -371,8 +407,8 @@
 
         if (rmsFrames && rmsFrames.length > 10) {
           const prevBound = boundaries[boundaries.length - 1];
-          const minAllowed = Math.max(prevBound + 0.28, expectedSec - 0.52);
-          const maxAllowed = Math.min(speechEnd - (segments.length - 1 - i) * 0.25, expectedSec + 0.52);
+          const minAllowed = Math.max(prevBound + 0.28, expectedSec - 0.68);
+          const maxAllowed = Math.min(speechEnd - (segments.length - 1 - i) * 0.25, expectedSec + 0.68);
 
           if (maxAllowed > minAllowed + 0.06) {
             const startF = Math.max(1, Math.floor(minAllowed / frameSec));

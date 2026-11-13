@@ -8,10 +8,10 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="奇妙毒物游乐园" />
   <title>奇妙毒物科学游乐园 · 99实拍图鉴·3D分子·借毒养成·王牌对战</title>
-  <link rel="manifest" href="manifest.webmanifest?v=3.4" />
-  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=3.4" />
-  <link rel="icon" type="image/png" href="assets/icon-512.png?v=3.4" />
-  <link rel="stylesheet" href="css/styles.css?v=3.4" />
+  <link rel="manifest" href="manifest.webmanifest?v=3.5" />
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=3.5" />
+  <link rel="icon" type="image/png" href="assets/icon-512.png?v=3.5" />
+  <link rel="stylesheet" href="css/styles.css?v=3.5" />
 </head>
 <body>
 
@@ -241,9 +241,14 @@
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;flex-wrap:wrap;">
             <span id="modalCodeBadge" class="mini-btn" style="pointer-events:none;"></span>
-            <button class="big-action-btn" id="btnSpeakCard" style="padding:9px 18px;min-height:42px;font-size:0.92rem;">
-              🔊 给我讲解
-            </button>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="big-action-btn" id="btnSpeakCard" style="padding:9px 16px;min-height:42px;font-size:0.92rem;">
+                🔊 给我讲解
+              </button>
+              <button class="big-action-btn ai-card-ask-btn" id="btnAskCardAI" style="padding:9px 16px;min-height:42px;font-size:0.92rem;">
+                🎤 随时互动
+              </button>
+            </div>
           </div>
 
           <!-- 升级4：🎙️ 我是毒物馆小馆长 · 专属配音录音间（本地+云同步） -->
@@ -256,17 +261,19 @@
     </div>
   </div>
 
-  <script src="js/data-catalog.js?v=3.4"></script>
-  <script src="js/data-photos.js?v=3.4"></script>
-  <script src="js/data-molecules3d.js?v=3.4"></script>
-  <script src="js/data-labs.js?v=3.4"></script>
-  <script src="js/data-hunt-scenes.js?v=3.4"></script>
-  <script src="js/visualizers.js?v=3.4"></script>
-  <script src="js/doubao-tts.js?v=3.4"></script>
-  <script src="js/upgrade1-ecosystem.js?v=3.4"></script>
-  <script src="js/upgrade2-molsurgery.js?v=3.4"></script>
-  <script src="js/upgrade3-battler.js?v=3.4"></script>
-  <script src="js/upgrade4-voice.js?v=3.4"></script>
-  <script src="js/app.js?v=3.4"></script>
+  <script src="js/data-catalog.js?v=3.5"></script>
+  <script src="js/data-bilingual.js?v=3.5"></script>
+  <script src="js/data-photos.js?v=3.5"></script>
+  <script src="js/data-molecules3d.js?v=3.5"></script>
+  <script src="js/data-labs.js?v=3.5"></script>
+  <script src="js/data-hunt-scenes.js?v=3.5"></script>
+  <script src="js/visualizers.js?v=3.5"></script>
+  <script src="js/doubao-tts.js?v=3.5"></script>
+  <script src="js/ai-companion.js?v=3.5"></script>
+  <script src="js/upgrade1-ecosystem.js?v=3.5"></script>
+  <script src="js/upgrade2-molsurgery.js?v=3.5"></script>
+  <script src="js/upgrade3-battler.js?v=3.5"></script>
+  <script src="js/upgrade4-voice.js?v=3.5"></script>
+  <script src="js/app.js?v=3.5"></script>
 </body>
 </html>

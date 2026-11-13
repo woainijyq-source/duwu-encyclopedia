@@ -13,20 +13,37 @@ ssh "${REMOTE_HOST}" "mkdir -p '${REMOTE_REL}' '${REMOTE_BASE}/shared-data/recor
 echo "==> [2/5] Uploading static & PWA bundle (index.html, manifest.webmanifest, sw.js, css, js, assets)..."
 tar -C "${PROJECT_DIR}" -czf - index.html manifest.webmanifest sw.js css js assets | ssh "${REMOTE_HOST}" "tar -xzf - -C '${REMOTE_REL}' && chmod -R a+rX '${REMOTE_REL}'"
 
-echo "==> [3/5] Installing Curator Voice & Doubao TTS Cache API service (127.0.0.1:8798)..."
+echo "==> [3/5] Installing Curator Voice, Doubao TTS Cache & DeepSeek Interactive API service (127.0.0.1:8798)..."
 PET_ENV="/Users/mac/projects/电子宠物/server/.env"
+DOUDOU_ENV="/Users/mac/projects/doudou-writing/.env"
+TTS_KEY=""
+AI_BASE_VAL="https://doudou-newapi.com"
+AI_KEY_VAL=""
+AI_MODEL_VAL="DeepSeek-V4.1-Flash"
+
 if [ -f "${PET_ENV}" ]; then
   TTS_KEY="$(grep -E '^DOUBAO_TTS_API_KEY=' "${PET_ENV}" | head -n1 | cut -d= -f2- | tr -d '\r\"'\''')"
-  if [ -n "${TTS_KEY}" ]; then
-    ssh "${REMOTE_HOST}" "umask 077 && cat > '${REMOTE_BASE}/shared-data/tts.env'" <<EOF
+fi
+if [ -f "${DOUDOU_ENV}" ]; then
+  AI_BASE_VAL="$(grep -E '^AI_BASE=' "${DOUDOU_ENV}" | head -n1 | cut -d= -f2- | tr -d '\r\"'\''')"
+  AI_KEY_VAL="$(grep -E '^AI_KEY=' "${DOUDOU_ENV}" | head -n1 | cut -d= -f2- | tr -d '\r\"'\''')"
+  AI_MODEL_VAL="$(grep -E '^AI_MODEL=' "${DOUDOU_ENV}" | head -n1 | cut -d= -f2- | tr -d '\r\"'\''')"
+fi
+
+if [ -n "${TTS_KEY}" ]; then
+  ssh "${REMOTE_HOST}" "umask 077 && cat > '${REMOTE_BASE}/shared-data/tts.env'" <<EOF
 VOLC_TTS_KEY=${TTS_KEY}
 VOLC_TTS_RESOURCE_ID=seed-tts-2.0
 VOLC_TTS_SPEAKER=zh_female_xiaohe_uranus_bigtts
 VOLC_TTS_RATE=-5
 TTS_PER_IP_HOUR=240
 TTS_PER_DAY=1500
+AI_BASE=${AI_BASE_VAL:-https://doudou-newapi.com}
+AI_KEY=${AI_KEY_VAL}
+AI_MODEL=${AI_MODEL_VAL:-DeepSeek-V4.1-Flash}
+CHAT_PER_IP_HOUR=120
+CHAT_PER_DAY=600
 EOF
-  fi
 fi
 scp -q "${PROJECT_DIR}/deploy/voice_server.py" "${REMOTE_HOST}:${REMOTE_BASE}/shared-data/voice_server.py"
 scp -q "${PROJECT_DIR}/deploy/duwu-voice.service" "${REMOTE_HOST}:/etc/systemd/system/duwu-voice.service"
