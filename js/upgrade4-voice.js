@@ -259,6 +259,7 @@
         if (btnRec) {
           btnRec.addEventListener("click", async () => {
             this.stopPlayback();
+            if (window.DoubaoTTS) window.DoubaoTTS.stop();
             if ("speechSynthesis" in window) window.speechSynthesis.cancel();
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === "undefined") {
               renderBar("⚠️ 当前浏览器未开启麦克风权限（请用 HTTPS 或 Safari/Chrome 打开）");
@@ -338,6 +339,7 @@
         if (btnPlay) {
           btnPlay.addEventListener("click", () => {
             this.stopPlayback();
+            if (window.DoubaoTTS) window.DoubaoTTS.stop();
             if ("speechSynthesis" in window) window.speechSynthesis.cancel();
             const loc = this.localMap.get(item.id);
             const cld = this.cloudMap.get(item.id);

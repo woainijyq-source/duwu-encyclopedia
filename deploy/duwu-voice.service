@@ -1,11 +1,14 @@
 [Unit]
-Description=Duwu Encyclopedia Curator Voice Sync API
+Description=Duwu Encyclopedia Curator Voice & Doubao TTS Cache API
 After=network.target
 
 [Service]
 Type=simple
 WorkingDirectory=/www/wwwroot/duwu-encyclopedia
+EnvironmentFile=-/www/wwwroot/duwu-encyclopedia/shared-data/tts.env
+Environment="DUWU_SHARED_DIR=/www/wwwroot/duwu-encyclopedia/shared-data"
 Environment="DUWU_VOICE_DIR=/www/wwwroot/duwu-encyclopedia/shared-data/recordings"
+Environment="DUWU_TTS_CACHE_DIR=/www/wwwroot/duwu-encyclopedia/shared-data/tts-cache"
 Environment="DUWU_VOICE_HOST=127.0.0.1"
 Environment="DUWU_VOICE_PORT=8798"
 ExecStart=/usr/bin/python3 /www/wwwroot/duwu-encyclopedia/shared-data/voice_server.py

@@ -178,6 +178,7 @@
   let ecoSandbox = null;
   let cardBattler = null;
   let voiceStudio = null;
+  let unsubscribeModalTts = null;
 
   function loadState() {
     try {
@@ -223,8 +224,13 @@
     return res;
   }
 
-  function speak(text) {
-    if (!state.sound || !("speechSynthesis" in window)) return;
+  function speak(text, opts) {
+    if (!state.sound) return;
+    if (window.DoubaoTTS) {
+      window.DoubaoTTS.speak(text, opts);
+      return;
+    }
+    if (!("speechSynthesis" in window)) return;
     window.speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.lang = "zh-CN";
@@ -260,6 +266,10 @@
     btnSound.addEventListener("click", () => {
       state.sound = !state.sound;
       window.SFX.enabled = state.sound;
+      if (window.DoubaoTTS) {
+        window.DoubaoTTS.enabled = state.sound;
+        if (!state.sound) window.DoubaoTTS.stop();
+      }
       if (!state.sound && "speechSynthesis" in window) window.speechSynthesis.cancel();
       btnSound.classList.toggle("on", state.sound);
       btnSound.textContent = state.sound ? "🔊 音效" : "🔇 静音";
@@ -540,6 +550,7 @@
           ? `<details style="margin-top:10px;background:var(--bg-inset);padding:10px 14px;border-radius:14px;cursor:pointer;">
                <summary style="font-weight:800;font-size:0.88rem;color:var(--c-amber);">🔎 爸爸妈妈伴读锦囊（点击展开深层原理）</summary>
                <div style="font-size:0.88rem;color:var(--text-sub);margin-top:8px;line-height:1.55;">${ruby(item.biochemDeep)}</div>
+               <button class="mini-btn" id="btnSpeakDeep" style="margin-top:8px;font-size:0.78rem;padding:5px 12px;">🔊 豆包朗读伴读锦囊</button>
              </details>`
           : ""
       }
@@ -547,17 +558,32 @@
 
     document.getElementById("superCardModal").classList.add("open");
 
+    const btnDeep = document.getElementById("btnSpeakDeep");
+    if (btnDeep && item.biochemDeep) {
+      btnDeep.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (voiceStudio) voiceStudio.stopPlayback();
+        speak(item.biochemDeep, { toggleIfPlaying: true });
+      });
+    }
+
     document.getElementById("btnTestBoil").addEventListener("click", () => {
       const box = document.getElementById("toyTestResultBox");
       if (fireDangerIds.has(item.id)) {
         window.SFX.bonk();
+        const msg = "千万别烧！矿物一遇高温灼烧，反而会跑出剧毒的汞蒸气或砒霜烟雾！";
         box.innerHTML = `<div class="kid-voice-bubble" style="border-color:#fb7185;background:rgba(251,113,133,0.18);">🚨 <strong>千万别烧！</strong> 矿物一遇高温灼烧，反而会跑出剧毒的汞蒸气或砒霜烟雾！</div>`;
+        speak(msg);
       } else if (heatDestroyedIds.has(item.id)) {
         window.SFX.sizzle();
+        const msg = "咕嘟咕嘟散架啦！它是怕热的大分子蛋白质，100摄氏度彻底煮透就会变性失活！";
         box.innerHTML = `<div class="kid-voice-bubble" style="border-color:#4ade80;background:rgba(74,222,128,0.18);">🫧✅ <strong>咕嘟咕嘟～散架啦！</strong> 它是怕热的大分子蛋白质，100°C 彻底煮透就会变性失活！（如四季豆焖熟就超安全！）</div>`;
+        speak(msg);
       } else {
         window.SFX.bonk();
+        const msg = "沸水完全煮不烂！它的分子结构锁得像小铁笼一样结实，普通做饭温度根本拆不动它！";
         box.innerHTML = `<div class="kid-voice-bubble" style="border-color:#fbbf24;background:rgba(251,191,36,0.18);">🫧☠️ <strong>沸水完全煮不烂！</strong> 它的分子结构锁得像小铁笼一样结实，普通做饭温度根本拆不动它！</div>`;
+        speak(msg);
       }
     });
 
@@ -565,16 +591,44 @@
       const box = document.getElementById("toyTestResultBox");
       if (isProteinVenom) {
         window.SFX.chime();
+        const msg = "咔嚓剪碎啦！它是主动注射型蛋白毒液，必须靠毒牙或毒刺扎进血管才厉害；遇到胃蛋白酶会被剪成小段！但嘴里有小伤口仍危险，绝不能尝哦！";
         box.innerHTML = `<div class="kid-voice-bubble" style="border-color:#4ade80;background:rgba(74,222,128,0.18);">✂️✨ <strong>咔嚓剪碎啦！</strong> 它是【🗡️主动注射型蛋白毒液】，必须靠毒牙/毒刺扎进血管才厉害；遇到胃蛋白酶会被剪成小段！（但嘴里有小伤口仍危险，绝不能尝哦！）</div>`;
+        speak(msg);
       } else {
         window.SFX.bonk();
+        const msg = "剪刀崩牙啦！它是小分子生物碱、糖苷或矿物，不是普通蛋白质，不怕胃酸剪刀，误食进肚子就会直接钻进血液！";
         box.innerHTML = `<div class="kid-voice-bubble" style="border-color:#fb7185;background:rgba(251,113,133,0.18);">💥🛡️ <strong>剪刀崩牙啦！</strong> 它是【小分子生物碱/糖苷/矿物】，不是普通蛋白质，不怕胃酸剪刀，误食进肚子就会直接钻进血液！</div>`;
+        speak(msg);
       }
     });
 
-    document.getElementById("btnSpeakCard").onclick = () => {
+    const btnSpeakCard = document.getElementById("btnSpeakCard");
+    const cardTtsText = `${item.name}。它的秘密武器是${item.molecule}。${item.summary}`;
+    const syncSpeakBtn = async () => {
+      if (!window.DoubaoTTS || !btnSpeakCard) return;
+      const st = window.DoubaoTTS.state;
+      const cur = window.DoubaoTTS.currentNormText;
+      const norm = window.DoubaoTTS.normalizeText ? window.DoubaoTTS.normalizeText(cardTtsText) : "";
+      if (cur && norm && cur === norm && st === "loading") {
+        btnSpeakCard.textContent = "⏳ 豆包合成中…";
+      } else if (cur && norm && cur === norm && st === "playing") {
+        btnSpeakCard.textContent = "⏹️ 停止朗读";
+      } else {
+        const cached = await window.DoubaoTTS.hasCachedLocal(cardTtsText);
+        btnSpeakCard.textContent = cached ? "🔊 豆包姐姐讲给我听 ⚡已缓存" : "🔊 豆包姐姐讲给我听！";
+      }
+    };
+    syncSpeakBtn();
+    if (unsubscribeModalTts) unsubscribeModalTts();
+    if (window.DoubaoTTS) {
+      unsubscribeModalTts = window.DoubaoTTS.onStatus(() => {
+        syncSpeakBtn();
+      });
+    }
+
+    btnSpeakCard.onclick = () => {
       if (voiceStudio) voiceStudio.stopPlayback();
-      speak(`${item.name}。它的秘密武器是${item.molecule}。${item.summary}`);
+      speak(cardTtsText, { toggleIfPlaying: true });
     };
   }
 
@@ -602,6 +656,11 @@
     });
 
     const close = () => {
+      if (unsubscribeModalTts) {
+        unsubscribeModalTts();
+        unsubscribeModalTts = null;
+      }
+      if (window.DoubaoTTS) window.DoubaoTTS.stop();
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
       if (voiceStudio) {
         voiceStudio.stopActiveRecording();
@@ -625,6 +684,15 @@
       document.getElementById("hudHeartIcon").textContent = heartIcon;
       document.getElementById("hudBpmText").textContent = bpmText;
       document.getElementById("cellSpeechToast").textContent = speech;
+      speak(speech);
+    });
+
+    document.querySelectorAll(".speech-toast").forEach((toastEl) => {
+      toastEl.style.cursor = "pointer";
+      toastEl.title = "点击让豆包姐姐朗读提示";
+      toastEl.addEventListener("click", () => {
+        if (toastEl.textContent) speak(toastEl.textContent, { toggleIfPlaying: true });
+      });
     });
 
     const tray = document.getElementById("reagentTray");
