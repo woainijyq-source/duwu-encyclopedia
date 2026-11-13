@@ -21,7 +21,7 @@
       .replace(EMOJI_RE, " ")
       .replace(/\s+/g, " ")
       .trim()
-      .slice(0, 500);
+      .slice(0, 600);
   }
 
   function cleanMoleculeForSpeech(mol) {
@@ -70,28 +70,70 @@
       .replace(/>/g, "&gt;");
   }
 
+  const EN_STOPWORDS = new Set([
+    "the", "a", "an", "is", "are", "am", "was", "were", "be", "to", "in", "on", "of",
+    "it", "its", "by", "for", "with", "and", "or", "not", "do", "don't", "does", "can",
+    "cannot", "from", "at", "this", "that", "we", "you", "your", "our", "they", "their",
+    "them", "us", "so", "if", "when", "what", "how", "very", "just", "too", "up", "out",
+    "off", "away", "into", "like", "let's", "all", "no", "say", "says", "mean", "means"
+  ]);
+
+  function highlightEnKeywordsHTML(enText, explicitKeywords) {
+    const str = String(enText || "");
+    if (!str) return "";
+
+    let targetSet = new Set();
+    if (Array.isArray(explicitKeywords) && explicitKeywords.length > 0) {
+      explicitKeywords.forEach((w) => {
+        if (w) targetSet.add(String(w).toLowerCase());
+      });
+    } else {
+      // 自动为自由对话里的英文短句挑选 2~3 个重点实词放大显示
+      const words = str.match(/[A-Za-z]+(?:-[A-Za-z]+)*/g) || [];
+      for (const w of words) {
+        const lw = w.toLowerCase();
+        if (lw.length >= 4 && !EN_STOPWORDS.has(lw)) {
+          targetSet.add(lw);
+          if (targetSet.size >= 3) break;
+        }
+      }
+    }
+
+    return str.replace(/[A-Za-z]+(?:-[A-Za-z]+|'[A-Za-z]+)*/g, (token) => {
+      const safe = escapeAttr(token);
+      if (targetSet.has(token.toLowerCase())) {
+        return `<span class="en-key-word">${safe}</span>`;
+      }
+      return safe;
+    });
+  }
+
   function renderClausesHTML(text, rubyFn, bilingualObj) {
     const clauses = splitIntoClauses(text);
     const rFn = typeof rubyFn === "function" ? rubyFn : (x) => x;
 
-    const formatClauseContent = (c) => {
-      if (/[A-Za-z]{2,}\s+[A-Za-z]{2,}/.test(c)) {
-        return `<span class="inline-en-badge">🇬🇧</span> ${rFn(c)}`;
-      }
-      return rFn(c);
-    };
-
     const items = clauses.map((c, idx) => {
       const hasEn = /[A-Za-z]{2,}\s+[A-Za-z]{2,}/.test(c);
-      return `<span class="tts-seg tts-clause ${hasEn ? "tts-clause-inline-en" : ""}" data-tts-seg="${escapeAttr(c)}" data-clause-idx="${idx}">${formatClauseContent(c)}</span>`;
+      if (hasEn) {
+        // 若是互动问答里的英文短句，自动重复朗读两遍，并重点放大核心单词！
+        const enMatch = c.match(/[A-Za-z][A-Za-z0-9\s,'"-]{3,}[.!?]?/);
+        const spokenClause = enMatch ? `${enMatch[0].trim()} ${c}` : `${c} ${c}`;
+        const formatted = c.replace(/[A-Za-z][A-Za-z0-9\s,'"-]{3,}[.!?]?/g, (enPart) =>
+          highlightEnKeywordsHTML(enPart)
+        );
+        return `<span class="tts-seg tts-clause tts-clause-inline-en" data-tts-seg="${escapeAttr(spokenClause)}" data-clause-idx="${idx}"><span class="bilingual-tag">🇬🇧 英文×2遍</span> ${formatted}</span>`;
+      }
+      return `<span class="tts-seg tts-clause" data-tts-seg="${escapeAttr(c)}" data-clause-idx="${idx}">${rFn(c)}</span>`;
     });
 
     if (bilingualObj && bilingualObj.en && bilingualObj.zh) {
-      const spokenPair = `${bilingualObj.en} ${bilingualObj.zh}`;
+      // 英文句子重复两遍朗读 + 中文对照
+      const spokenPair = `${bilingualObj.en} ${bilingualObj.en} ${bilingualObj.zh}`;
+      const highlightedEnHTML = highlightEnKeywordsHTML(bilingualObj.en, bilingualObj.kw);
       const bilingualHTML = `
-        <span class="tts-seg tts-clause tts-bilingual-clause" data-tts-seg="${escapeAttr(spokenPair)}" data-bilingual-en="${escapeAttr(bilingualObj.en)}" title="点击可单独跟读这句英语">
-          <span class="bilingual-tag">🇬🇧 顺便学英文</span>
-          <span class="bilingual-en">${escapeAttr(bilingualObj.en)}</span>
+        <span class="tts-seg tts-clause tts-bilingual-clause" data-tts-seg="${escapeAttr(spokenPair)}" data-bilingual-en="${escapeAttr(bilingualObj.en)}" title="点击可单独跟读这句英语（英文重复读2遍）">
+          <span class="bilingual-tag">🇬🇧 英文×2遍</span>
+          <span class="bilingual-en">${highlightedEnHTML}</span>
           <span class="bilingual-zh">${rFn(bilingualObj.zh)}</span>
         </span>
       `.trim();

@@ -67,7 +67,7 @@ AI_BASE = (os.environ.get("AI_BASE") or "https://doudou-newapi.com").strip().rst
 AI_KEY = (os.environ.get("AI_KEY") or "").strip()
 AI_MODEL = (os.environ.get("AI_MODEL") or "DeepSeek-V4.1-Flash").strip()
 
-TTS_MAX_CHARS = 500
+TTS_MAX_CHARS = 600
 TTS_PER_IP_HOUR = int(os.environ.get("TTS_PER_IP_HOUR", "240"))
 TTS_PER_DAY = int(os.environ.get("TTS_PER_DAY", "1500"))
 CHAT_PER_IP_HOUR = int(os.environ.get("CHAT_PER_IP_HOUR", "120"))

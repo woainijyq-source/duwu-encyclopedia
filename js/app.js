@@ -605,19 +605,19 @@
       if (fireDangerIds.has(item.id)) {
         window.SFX.bonk();
         const msg = "千万别烧！矿物一遇高温灼烧，反而会跑出剧毒的汞蒸气或砒霜烟雾！";
-        const biTest = { en: "Never put this rock in a fire!", zh: "千万别把这块矿石放进火里烧！", pos: "end" };
+        const biTest = { en: "Never put this rock in a fire!", zh: "千万别把这块矿石放进火里烧！", kw: ["rock", "fire"], pos: "end" };
         box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#fb7185;background:rgba(251,113,133,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">🚨 ${renderClauses(msg, biTest)}</div></div>`;
         speak(null, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
       } else if (heatDestroyedIds.has(item.id)) {
         window.SFX.sizzle();
         const msg = "咕嘟咕嘟散架啦！它是怕热的大分子蛋白质，100°C彻底煮透就会变性失活！（如四季豆焖熟就超安全！）";
-        const biTest = { en: "High heat breaks the big protein!", zh: "高温能把大蛋白煮散架！", pos: "mid" };
+        const biTest = { en: "High heat breaks the big protein!", zh: "高温能把大蛋白煮散架！", kw: ["heat", "breaks", "protein"], pos: "mid" };
         box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#4ade80;background:rgba(74,222,128,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">🫧✅ ${renderClauses(msg, biTest)}</div></div>`;
         speak(null, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
       } else {
         window.SFX.bonk();
         const msg = "沸水完全煮不烂！它的分子结构锁得像小铁笼一样结实，普通做饭温度根本拆不动它！";
-        const biTest = { en: "Boiling water cannot break it!", zh: "沸水也煮不烂它！", pos: "mid" };
+        const biTest = { en: "Boiling water cannot break it!", zh: "沸水也煮不烂它！", kw: ["Boiling", "water", "break"], pos: "mid" };
         box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#fbbf24;background:rgba(251,191,36,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">🫧☠️ ${renderClauses(msg, biTest)}</div></div>`;
         speak(null, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
       }
@@ -628,13 +628,13 @@
       if (isProteinVenom) {
         window.SFX.chime();
         const msg = "咔嚓剪碎啦！它是主动注射型蛋白毒液，必须靠毒牙或毒刺扎进血管才厉害；遇到胃蛋白酶会被剪成小段！（但嘴里有小伤口仍危险，绝不能尝哦！）";
-        const biTest = { en: "Stomach enzymes cut it into pieces!", zh: "胃里的酶剪刀能把它剪成小段！", pos: "mid" };
+        const biTest = { en: "Stomach enzymes cut it into pieces!", zh: "胃里的酶剪刀能把它剪成小段！", kw: ["Stomach", "enzymes", "pieces"], pos: "mid" };
         box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#4ade80;background:rgba(74,222,128,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">✂️✨ ${renderClauses(msg, biTest)}</div></div>`;
         speak(null, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
       } else {
         window.SFX.bonk();
         const msg = "剪刀崩牙啦！它是小分子生物碱、糖苷或矿物，不是普通蛋白质，不怕胃酸剪刀，误食进肚子就会直接钻进血液！";
-        const biTest = { en: "It is too small for the scissors!", zh: "它个头太小，蛋白酶剪刀剪不动！", pos: "mid" };
+        const biTest = { en: "It is too small for the scissors!", zh: "它个头太小，蛋白酶剪刀剪不动！", kw: ["small", "scissors"], pos: "mid" };
         box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#fb7185;background:rgba(251,113,133,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">💥🛡️ ${renderClauses(msg, biTest)}</div></div>`;
         speak(null, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
       }
