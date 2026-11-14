@@ -1067,12 +1067,20 @@ html[data-theme="light"] .top-bar {
   border-radius: 18px;
   padding: 12px 14px;
   margin-top: 10px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .curator-voice-card.voiced {
   border-style: solid;
   border-color: #fbbf24;
   background: linear-gradient(135deg, rgba(251, 191, 36, 0.14), rgba(45, 212, 191, 0.12));
+}
+
+.curator-voice-card.is-recording {
+  border-style: solid;
+  border-color: #fb7185;
+  background: rgba(251, 113, 133, 0.14);
+  box-shadow: 0 0 0 4px rgba(251, 113, 133, 0.22);
 }
 
 .voice-btn {
@@ -1093,9 +1101,95 @@ html[data-theme="light"] .top-bar {
 
 .voice-btn:active { transform: scale(0.96); }
 .voice-btn.record { background: linear-gradient(135deg, #fb7185, #e11d48); color: #fff; }
+.voice-btn.hold-to-record-btn {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.35);
+}
 .voice-btn.stop { background: #ef4444; color: #fff; animation: pulseHint 1s infinite; }
 .voice-btn.play { background: linear-gradient(135deg, #fbbf24, #f59e0b); color: #1c1917; }
+.voice-btn.play.playing { background: linear-gradient(135deg, #38bdf8, #2dd4bf); color: #042226; }
 .voice-btn.del { background: var(--bg-card); color: var(--text-sub); border: 1px solid var(--border-light); padding: 9px 11px; }
+
+.voice-clips-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(251, 191, 36, 0.35);
+}
+
+.voice-clip-item {
+  display: inline-flex;
+  align-items: center;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-light);
+  border-radius: 99px;
+  padding: 3px 5px 3px 4px;
+  gap: 4px;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.voice-clip-item:hover {
+  border-color: var(--c-amber);
+}
+
+.voice-clip-item.playing {
+  border-color: var(--c-teal);
+  background: rgba(45, 212, 191, 0.16);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.2);
+}
+
+.voice-clip-play-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 800;
+  padding: 4px 8px;
+  border-radius: 99px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.voice-clip-play-btn .clip-dur {
+  font-size: 0.75rem;
+  color: var(--c-amber);
+  font-weight: 900;
+}
+
+.voice-clip-play-btn .clip-sync-tag {
+  font-size: 0.74rem;
+  opacity: 0.88;
+}
+
+.voice-clip-del-btn {
+  appearance: none;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-sub);
+  font-size: 0.78rem;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.voice-clip-del-btn:hover {
+  background: rgba(251, 113, 133, 0.25);
+  color: #fb7185;
+}
 
 /* 2. 食物链借毒生态养成缸 & 分子拆弹手术台 */
 .eco-tank-shell, .surgery-shell {

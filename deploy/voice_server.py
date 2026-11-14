@@ -27,8 +27,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-ARCHIVE_ID_RE = re.compile(r"^ch[0-8]-\d{2}$")
-MAX_REC_BYTES = 3_600_000  # 3.6 MB max per 35s curator voice clip
+ARCHIVE_ID_RE = re.compile(r"^ch[0-8]-\d{2}(?:__[a-zA-Z0-9_-]{1,36})?$")
+MAX_REC_BYTES = 25_000_000  # 25 MB max per curator voice clip (no duration cap)
 ALLOWED_REC_MIMES = {
     "audio/mp4",
     "audio/webm",
@@ -535,8 +535,10 @@ class DuwuVoiceAndTTSHandler(BaseHTTPRequestHandler):
                     aid = meta.get("id", "")
                     bin_file = REC_DIR / f"{aid}.bin"
                     if ARCHIVE_ID_RE.match(aid) and bin_file.exists():
+                        base_aid = meta.get("archiveId") or aid.split("__")[0]
                         items.append({
                             "id": aid,
+                            "archiveId": base_aid,
                             "mimeType": meta.get("mimeType", "audio/mp4"),
                             "duration": meta.get("duration", 1),
                             "updatedAt": meta.get("updatedAt", 0),
@@ -600,17 +602,19 @@ class DuwuVoiceAndTTSHandler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length)
         mime = clean_mime(self.headers.get("Content-Type", "audio/mp4"))
         try:
-            dur = max(1, min(60, int(float(self.headers.get("X-Duration-Sec", "5")))))
+            dur = max(1, min(3600, int(float(self.headers.get("X-Duration-Sec", "5")))))
         except Exception:
             dur = 5
 
         ensure_dirs()
         now_ms = int(time.time() * 1000)
+        base_aid = aid.split("__")[0]
         tmp_bin = REC_DIR / f"{aid}.bin.tmp"
         tmp_meta = REC_DIR / f"{aid}.json.tmp"
         tmp_bin.write_bytes(raw)
         tmp_meta.write_text(json.dumps({
             "id": aid,
+            "archiveId": base_aid,
             "mimeType": mime,
             "duration": dur,
             "updatedAt": now_ms,
@@ -619,7 +623,7 @@ class DuwuVoiceAndTTSHandler(BaseHTTPRequestHandler):
         tmp_bin.replace(REC_DIR / f"{aid}.bin")
         tmp_meta.replace(REC_DIR / f"{aid}.json")
 
-        return self._send_json(200, {"ok": True, "id": aid, "updatedAt": now_ms})
+        return self._send_json(200, {"ok": True, "id": aid, "archiveId": base_aid, "updatedAt": now_ms})
 
     def do_DELETE(self):
         parsed = urlparse(self.path)

@@ -441,7 +441,7 @@
         <div style="grid-column:1/-1;text-align:center;padding:36px 20px;background:var(--bg-panel);border-radius:24px;border:2px dashed var(--c-amber);">
           <div style="font-size:3rem;">🎙️👑</div>
           <h3 style="margin:8px 0;">小馆长还没有录第一条专属解说哦！</h3>
-          <div style="color:var(--text-sub);font-weight:700;">点开任意一张生物闪卡，按下【🎙️ 按下开始录音】，就能点亮专属金勋章啦！</div>
+          <div style="color:var(--text-sub);font-weight:700;">点开任意一张生物闪卡，按住【🎙️ 按住说话配音】不放，松开就能点亮专属金勋章（每种毒物还能录多条哦）！</div>
         </div>
       `;
       return;
@@ -460,7 +460,8 @@
       const photo = getPhoto(item.id);
       const mb = mechBadgeLabel[item.mech] || mechBadgeLabel.concept;
       const lit = state.litCards.includes(item.id);
-      const voiced = voiceStudio && voiceStudio.hasVoice(item.id);
+      const voiceCount = voiceStudio && voiceStudio.getVoiceCount ? voiceStudio.getVoiceCount(item.id) : (voiceStudio && voiceStudio.hasVoice(item.id) ? 1 : 0);
+      const voiced = voiceCount > 0;
       const shortCode = item.code.replace("第", "").replace("章 · 档案", "-").replace("序-0", "序");
 
       return `
@@ -473,7 +474,7 @@
             }
             <span class="dex-num-badge">${shortCode} ${lit ? "⭐" : ""}</span>
             <span class="dex-3d-badge">🧬 3D分子</span>
-            ${voiced ? `<span class="dex-voice-badge">🎙️ 已配音</span>` : ""}
+            ${voiced ? `<span class="dex-voice-badge">🎙️ 已配音${voiceCount > 1 ? ` ×${voiceCount}` : ""}</span>` : ""}
             <span class="dex-mech-dot" style="background:${mb.bg};">${mb.txt}</span>
           </div>
           <div class="dex-info">
