@@ -1,5 +1,5 @@
 // 奇妙毒物科学游乐园 Service Worker (iPad 离线秒开 & 海外实拍图极速缓存)
-const CACHE_NAME = "duwu-playground-v3.9";
+const CACHE_NAME = "duwu-playground-v4.0";
 const CORE_SHELL = [
   "./",
   "./index.html",
@@ -46,8 +46,8 @@ self.addEventListener("fetch", (event) => {
   if (req.method !== "GET") return;
 
   const url = new URL(req.url);
-  // 录音云同步 API 永远直连网络，不走 SW 缓存
-  if (url.pathname.includes("/api/")) return;
+  // 录音云同步 API 与 MP4 视频流（含 Range 分段请求）永远直连网络，确保 iOS/Safari/Chrome 视频秒播
+  if (url.pathname.includes("/api/") || url.pathname.endsWith(".mp4") || req.headers.has("range")) return;
 
   // 图片与静态素材：Cache-First + 后台更新，海外服务器二次打开 0 毫秒！
   if (url.pathname.includes("/assets/")) {

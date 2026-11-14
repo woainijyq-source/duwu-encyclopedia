@@ -8,10 +8,10 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="奇妙毒物游乐园" />
   <title>奇妙毒物科学游乐园 · 99实拍图鉴·3D分子·借毒养成·王牌对战</title>
-  <link rel="manifest" href="manifest.webmanifest?v=3.9" />
-  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=3.9" />
-  <link rel="icon" type="image/png" href="assets/icon-512.png?v=3.9" />
-  <link rel="stylesheet" href="css/styles.css?v=3.9" />
+  <link rel="manifest" href="manifest.webmanifest?v=4.0" />
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=4.0" />
+  <link rel="icon" type="image/png" href="assets/icon-512.png?v=4.0" />
+  <link rel="stylesheet" href="css/styles.css?v=4.0" />
 </head>
 <body>
 
@@ -230,15 +230,17 @@
     <div class="super-card-modal">
       <button class="close-circle-btn" id="btnCloseSuperModal" aria-label="关闭">✕</button>
       <div class="super-card-grid">
-        <!-- 左半边：高清实拍照片 & 真 3D 旋转分子 -->
+        <!-- 左半边：高清实拍照片 & 施毒实况短片 & 真 3D 旋转分子 -->
         <div>
           <div class="visual-showcase-box">
             <img id="modalPhotoImg" class="showcase-photo" src="" alt="" />
+            <video id="modalActionVideo" class="showcase-video" playsinline controls loop preload="metadata"></video>
             <canvas id="mol3dCanvas"></canvas>
-            <div class="view-toggle-pills" id="modalViewSwitch">
-              <button class="view-pill active" data-vmode="photo">📸 看高清真身</button>
-              <button class="view-pill" id="btnSwitch3DMol" data-vmode="mol3d">🧬 转 3D 分子</button>
-            </div>
+          </div>
+          <div class="view-toggle-pills" id="modalViewSwitch">
+            <button class="view-pill active" data-vmode="photo">📸 看高清真身</button>
+            <button class="view-pill video-pill-highlight" id="btnSwitchActionVideo" data-vmode="video">🎬 看施毒视频</button>
+            <button class="view-pill" id="btnSwitch3DMol" data-vmode="mol3d">🧬 转 3D 分子</button>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;flex-wrap:wrap;">
             <span id="modalCodeBadge" class="mini-btn" style="pointer-events:none;"></span>
@@ -280,21 +282,21 @@
     </div>
   </div>
 
-  <script src="js/data-catalog.js?v=3.9"></script>
-  <script src="js/data-bilingual.js?v=3.9"></script>
-  <script src="js/data-card-interactions.js?v=3.9"></script>
-  <script src="js/data-tts-manifest.js?v=3.9"></script>
-  <script src="js/data-photos.js?v=3.9"></script>
-  <script src="js/data-molecules3d.js?v=3.9"></script>
-  <script src="js/data-labs.js?v=3.9"></script>
-  <script src="js/data-hunt-scenes.js?v=3.9"></script>
-  <script src="js/visualizers.js?v=3.9"></script>
-  <script src="js/doubao-tts.js?v=3.9"></script>
-  <script src="js/ai-companion.js?v=3.9"></script>
-  <script src="js/upgrade1-ecosystem.js?v=3.9"></script>
-  <script src="js/upgrade2-molsurgery.js?v=3.9"></script>
-  <script src="js/upgrade3-battler.js?v=3.9"></script>
-  <script src="js/upgrade4-voice.js?v=3.9"></script>
-  <script src="js/app.js?v=3.9"></script>
+  <script src="js/data-catalog.js?v=4.0"></script>
+  <script src="js/data-bilingual.js?v=4.0"></script>
+  <script src="js/data-card-interactions.js?v=4.0"></script>
+  <script src="js/data-tts-manifest.js?v=4.0"></script>
+  <script src="js/data-photos.js?v=4.0"></script>
+  <script src="js/data-molecules3d.js?v=4.0"></script>
+  <script src="js/data-labs.js?v=4.0"></script>
+  <script src="js/data-hunt-scenes.js?v=4.0"></script>
+  <script src="js/visualizers.js?v=4.0"></script>
+  <script src="js/doubao-tts.js?v=4.0"></script>
+  <script src="js/ai-companion.js?v=4.0"></script>
+  <script src="js/upgrade1-ecosystem.js?v=4.0"></script>
+  <script src="js/upgrade2-molsurgery.js?v=4.0"></script>
+  <script src="js/upgrade3-battler.js?v=4.0"></script>
+  <script src="js/upgrade4-voice.js?v=4.0"></script>
+  <script src="js/app.js?v=4.0"></script>
 </body>
 </html>

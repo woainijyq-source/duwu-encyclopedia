@@ -476,7 +476,7 @@
                 : `<div class="dex-fallback-art">${item.emoji}</div>`
             }
             <span class="dex-num-badge">${shortCode} ${lit ? "⭐" : ""}</span>
-            <span class="dex-3d-badge">🧬 3D分子</span>
+            <span class="dex-3d-badge">🎬 施毒视频 · 3D</span>
             ${voiced ? `<span class="dex-voice-badge">🎙️ 已配音${voiceCount > 1 ? ` ×${voiceCount}` : ""}</span>` : ""}
             <span class="dex-mech-dot" style="background:${mb.bg};">${mb.txt}</span>
           </div>
@@ -516,11 +516,17 @@
     const molData = getMol3DData(id);
 
     const imgEl = document.getElementById("modalPhotoImg");
+    const videoEl = document.getElementById("modalActionVideo");
     const canvas3d = document.getElementById("mol3dCanvas");
     const btn3d = document.getElementById("btnSwitch3DMol");
 
     imgEl.src = photo || "assets/scenes/panorama.jpg";
     imgEl.style.display = "block";
+    if (videoEl) {
+      videoEl.pause();
+      videoEl.src = `assets/videos/${id}.mp4`;
+      videoEl.style.display = "none";
+    }
     canvas3d.style.display = "none";
 
     document.querySelectorAll("#modalViewSwitch .view-pill").forEach((p) => {
@@ -851,6 +857,8 @@
 
     const triggerMainCardSpeech = () => {
       if (voiceStudio) voiceStudio.stopPlayback();
+      const vEl = document.getElementById("modalActionVideo");
+      if (vEl && !vEl.paused) vEl.pause();
       speak(null, {
         toggleIfPlaying: true,
         scopeEl: document.getElementById("modalCardSpeechScope"),
@@ -972,8 +980,28 @@
         const vmode = pill.getAttribute("data-vmode");
         document.querySelectorAll("#modalViewSwitch .view-pill").forEach((p) => p.classList.remove("active"));
         pill.classList.add("active");
-        document.getElementById("modalPhotoImg").style.display = vmode === "photo" ? "block" : "none";
-        document.getElementById("mol3dCanvas").style.display = vmode === "mol3d" ? "block" : "none";
+
+        const imgEl = document.getElementById("modalPhotoImg");
+        const videoEl = document.getElementById("modalActionVideo");
+        const canvas3d = document.getElementById("mol3dCanvas");
+
+        if (imgEl) imgEl.style.display = vmode === "photo" ? "block" : "none";
+        if (videoEl) videoEl.style.display = vmode === "video" ? "block" : "none";
+        if (canvas3d) canvas3d.style.display = vmode === "mol3d" ? "block" : "none";
+
+        if (videoEl) {
+          if (vmode === "video") {
+            if (window.DoubaoTTS) window.DoubaoTTS.stop();
+            if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+            if (voiceStudio) voiceStudio.stopPlayback();
+            try {
+              videoEl.currentTime = 0;
+              videoEl.play().catch(() => {});
+            } catch (_) {}
+          } else {
+            videoEl.pause();
+          }
+        }
       });
     });
 
@@ -988,6 +1016,10 @@
       if (voiceStudio) {
         voiceStudio.stopActiveRecording();
         voiceStudio.stopPlayback();
+      }
+      const videoEl = document.getElementById("modalActionVideo");
+      if (videoEl) {
+        videoEl.pause();
       }
       document.getElementById("superCardModal").classList.remove("open");
     };

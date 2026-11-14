@@ -951,6 +951,14 @@ html[data-theme="light"] .top-bar {
   display: block;
 }
 
+.showcase-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: none;
+  background: #090f1c;
+}
+
 #mol3dCanvas {
   width: 100%;
   height: 100%;
@@ -960,13 +968,11 @@ html[data-theme="light"] .top-bar {
 }
 
 .view-toggle-pills {
-  position: absolute;
-  bottom: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 8px;
-  background: rgba(15, 23, 42, 0.86);
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  background: rgba(15, 23, 42, 0.9);
   padding: 5px;
   border-radius: 99px;
   border: 1px solid rgba(255,255,255,0.22);
@@ -980,15 +986,23 @@ html[data-theme="light"] .top-bar {
   font-family: inherit;
   font-weight: 800;
   font-size: 0.84rem;
-  padding: 7px 14px;
+  padding: 8px 10px;
   border-radius: 99px;
   cursor: pointer;
   white-space: nowrap;
+  text-align: center;
+  transition: transform 0.15s ease, background 0.18s ease, color 0.18s ease;
+}
+
+.view-pill.video-pill-highlight:not(.active) {
+  color: #fde047;
+  background: rgba(250, 204, 21, 0.12);
 }
 
 .view-pill.active {
   background: var(--c-teal);
   color: #052220;
+  box-shadow: 0 3px 10px rgba(45, 212, 191, 0.35);
 }
 
 /* 弹窗右侧：每张卡片专属科学互动实验台 + 考考小馆长二选一闯关 */
