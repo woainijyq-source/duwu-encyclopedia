@@ -148,6 +148,7 @@
     foundHunt: [], // 25 处跨场景 key 列表
     curedIds: [],
     surgeryWon: [],
+    cardQuizWon: [],
     pkStreak: 0,
     stars: 0,
 
@@ -191,6 +192,7 @@
       state.foundHunt = (s.foundHunt || []).map((k) => (k.includes("_") ? k : `p_${k}`));
       state.curedIds = s.curedIds || [];
       state.surgeryWon = s.surgeryWon || [];
+      state.cardQuizWon = s.cardQuizWon || [];
       state.stars = s.stars || 0;
       if (s.theme) state.theme = s.theme;
     } catch (_) {}
@@ -203,6 +205,7 @@
         foundHunt: state.foundHunt,
         curedIds: state.curedIds,
         surgeryWon: state.surgeryWon,
+        cardQuizWon: state.cardQuizWon,
         stars: state.stars,
         theme: state.theme
       }));
@@ -556,6 +559,17 @@
 
     const spokenMol = cleanMol(item.molecule);
     const bilingual = (window.BILINGUAL_NOTES && window.BILINGUAL_NOTES[item.id]) || null;
+    const cardInter = (window.CARD_INTERACTIONS && window.CARD_INTERACTIONS[item.id]) || null;
+    const exp1 = cardInter && cardInter.exp1
+      ? cardInter.exp1
+      : { icon: "🔬🧪", title: `测试${item.name}特性`, sub: "点我观察它的分子反应", tone: "teal", sfx: "chime", badge: "🔬✨", msg: item.summary, bi: bilingual };
+    const exp2 = cardInter && cardInter.exp2
+      ? cardInter.exp2
+      : { icon: "🛡️💡", title: "安全防护与科学揭秘", sub: "点我解锁关键知识", tone: "amber", sfx: "sizzle", badge: "🛡️✨", msg: item.biochemDeep || item.summary, bi: bilingual };
+    const quiz = cardInter && cardInter.quiz ? cardInter.quiz : null;
+    const quizAlreadyWon = state.cardQuizWon.includes(item.id);
+    const teleportInfo = getCardPlaygroundTeleport(item);
+
     const rightBox = document.getElementById("modalRightInteractive");
     rightBox.innerHTML = `
       <div id="modalCardSpeechScope" class="tts-reading-scope">
@@ -573,20 +587,40 @@
         </div>
       </div>
 
-      <div class="mini-test-row">
-        <button class="toy-test-btn" id="btnTestBoil">
-          <div style="font-size:2rem;">🍲🔥</div>
-          <div style="font-weight:900;margin-top:4px;">丢进 100°C 沸水锅！</div>
-          <div style="font-size:0.76rem;color:var(--text-muted);">点我看能不能煮烂它</div>
+      <div class="mini-test-row ${quiz ? "three-cols" : ""}">
+        <button type="button" class="toy-test-btn" id="btnCardExp1">
+          <div style="font-size:1.75rem;line-height:1.1;">${exp1.icon}</div>
+          <div style="font-weight:900;font-size:0.86rem;margin-top:4px;line-height:1.25;">${ruby(exp1.title)}</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px;line-height:1.2;">${exp1.sub}</div>
         </button>
-        <button class="toy-test-btn" id="btnTestAcid">
-          <div style="font-size:2rem;">✂️🧪</div>
-          <div style="font-weight:900;margin-top:4px;">丢进胃蛋白酶剪刀！</div>
-          <div style="font-size:0.76rem;color:var(--text-muted);">点我看是大蛋白还是小分子</div>
+        <button type="button" class="toy-test-btn" id="btnCardExp2">
+          <div style="font-size:1.75rem;line-height:1.1;">${exp2.icon}</div>
+          <div style="font-weight:900;font-size:0.86rem;margin-top:4px;line-height:1.25;">${ruby(exp2.title)}</div>
+          <div style="font-size:0.72rem;color:var(--text-muted);margin-top:2px;line-height:1.2;">${exp2.sub}</div>
         </button>
+        ${
+          quiz
+            ? `<button type="button" class="toy-test-btn quiz-entry-btn ${quizAlreadyWon ? "won" : ""}" id="btnCardQuiz">
+                 <div style="font-size:1.75rem;line-height:1.1;">🎯🏆</div>
+                 <div style="font-weight:900;font-size:0.86rem;margin-top:4px;line-height:1.25;">${ruby("考考小馆长")}</div>
+                 <div style="font-size:0.72rem;color:${quizAlreadyWon ? "#4ade80" : "var(--c-amber)"};margin-top:2px;font-weight:800;" id="cardQuizSubText">
+                   ${quizAlreadyWon ? "✅ 已闯关成功！" : "互动闯关 (+2⭐)"}
+                 </div>
+               </button>`
+            : ""
+        }
       </div>
 
       <div id="toyTestResultBox" style="min-height:54px;"></div>
+
+      ${
+        teleportInfo
+          ? `<button type="button" class="card-teleport-btn" id="btnCardTeleport">
+               <span>🚀</span>
+               <span>${ruby(teleportInfo.label)}</span>
+             </button>`
+          : ""
+      }
 
       <div style="background:var(--bg-inset);border-radius:16px;padding:12px 14px;margin-top:8px;">
         ${renderPowerBar("⚡ 神经锁定力", radar[0], "#38bdf8")}
@@ -626,45 +660,180 @@
       });
     }
 
-    document.getElementById("btnTestBoil").addEventListener("click", () => {
-      const box = document.getElementById("toyTestResultBox");
-      if (fireDangerIds.has(item.id)) {
-        window.SFX.bonk();
-        const msg = "千万别烧！矿物一遇高温灼烧，反而会跑出剧毒的汞蒸气或砒霜烟雾！";
-        const biTest = { en: "Never put this rock in a fire!", zh: "千万别把这块矿石放进火里烧！", kw: ["rock", "fire"], pos: "end" };
-        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#fb7185;background:rgba(251,113,133,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">🚨 ${renderClauses(msg, biTest)}</div></div>`;
-        speak(null, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
-      } else if (heatDestroyedIds.has(item.id)) {
-        window.SFX.sizzle();
-        const msg = "咕嘟咕嘟散架啦！它是怕热的大分子蛋白质，100°C彻底煮透就会变性失活！（如四季豆焖熟就超安全！）";
-        const biTest = { en: "High heat breaks the big protein!", zh: "高温能把大蛋白煮散架！", kw: ["heat", "breaks", "protein"], pos: "mid" };
-        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#4ade80;background:rgba(74,222,128,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">🫧✅ ${renderClauses(msg, biTest)}</div></div>`;
-        speak(null, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
-      } else {
-        window.SFX.bonk();
-        const msg = "沸水完全煮不烂！它的分子结构锁得像小铁笼一样结实，普通做饭温度根本拆不动它！";
-        const biTest = { en: "Boiling water cannot break it!", zh: "沸水也煮不烂它！", kw: ["Boiling", "water", "break"], pos: "mid" };
-        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#fbbf24;background:rgba(251,191,36,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">🫧☠️ ${renderClauses(msg, biTest)}</div></div>`;
-        speak(null, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
-      }
-    });
+    const toneStyleMap = {
+      green: { border: "#4ade80", bg: "rgba(74, 222, 128, 0.18)" },
+      rose: { border: "#fb7185", bg: "rgba(251, 113, 133, 0.18)" },
+      amber: { border: "#fbbf24", bg: "rgba(251, 191, 36, 0.18)" },
+      teal: { border: "#2dd4bf", bg: "rgba(45, 212, 191, 0.18)" },
+      purple: { border: "#c084fc", bg: "rgba(192, 132, 252, 0.18)" }
+    };
 
-    document.getElementById("btnTestAcid").addEventListener("click", () => {
-      const box = document.getElementById("toyTestResultBox");
-      if (isProteinVenom) {
-        window.SFX.chime();
-        const msg = "咔嚓剪碎啦！它是主动注射型蛋白毒液，必须靠毒牙或毒刺扎进血管才厉害；遇到胃蛋白酶会被剪成小段！（但嘴里有小伤口仍危险，绝不能尝哦！）";
-        const biTest = { en: "Stomach enzymes cut it into pieces!", zh: "胃里的酶剪刀能把它剪成小段！", kw: ["Stomach", "enzymes", "pieces"], pos: "mid" };
-        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#4ade80;background:rgba(74,222,128,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">✂️✨ ${renderClauses(msg, biTest)}</div></div>`;
-        speak(null, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
-      } else {
-        window.SFX.bonk();
-        const msg = "剪刀崩牙啦！它是小分子生物碱、糖苷或矿物，不是普通蛋白质，不怕胃酸剪刀，误食进肚子就会直接钻进血液！";
-        const biTest = { en: "It is too small for the scissors!", zh: "它个头太小，蛋白酶剪刀剪不动！", kw: ["small", "scissors"], pos: "mid" };
-        box.innerHTML = `<div class="kid-voice-bubble tts-reading-scope" style="border-color:#fb7185;background:rgba(251,113,133,0.18);"><div class="tts-toy-status"></div><div class="tts-clauses-body">💥🛡️ ${renderClauses(msg, biTest)}</div></div>`;
-        speak(null, { scopeEl: box, statusMountEl: box.querySelector(".tts-toy-status"), playTapSfx: false });
+    const setActiveToyBtn = (activeBtn) => {
+      rightBox.querySelectorAll(".toy-test-btn").forEach((b) => b.classList.toggle("active", b === activeBtn));
+    };
+
+    const bindBilingualClickInBox = (boxEl) => {
+      const biEl = boxEl.querySelector(".tts-bilingual-clause");
+      if (biEl) {
+        biEl.addEventListener("click", (e) => {
+          if (window.DoubaoTTS && window.DoubaoTTS.state !== "idle") return;
+          e.stopPropagation();
+          if (voiceStudio) voiceStudio.stopPlayback();
+          const segText = biEl.getAttribute("data-tts-seg") || "";
+          speak(segText, {
+            toggleIfPlaying: true,
+            segments: [{ el: biEl, text: segText }],
+            scopeEl: boxEl,
+            statusMountEl: boxEl.querySelector(".tts-toy-status")
+          });
+        });
       }
-    });
+    };
+
+    const runCardExp = (expObj, btnEl) => {
+      setActiveToyBtn(btnEl);
+      if (voiceStudio) voiceStudio.stopPlayback();
+      const sfxName = expObj.sfx || "chime";
+      if (window.SFX && typeof window.SFX[sfxName] === "function") {
+        window.SFX[sfxName]();
+      }
+      const st = toneStyleMap[expObj.tone] || toneStyleMap.teal;
+      const box = document.getElementById("toyTestResultBox");
+      box.innerHTML = `
+        <div class="kid-voice-bubble tts-reading-scope" style="border-color:${st.border};background:${st.bg};cursor:pointer;" title="点击开始或停止语音讲解">
+          <div class="tts-toy-status"></div>
+          <div class="tts-clauses-body">${expObj.badge || "🔬✨"} ${renderClauses(expObj.msg, expObj.bi)}</div>
+        </div>
+      `;
+      bindBilingualClickInBox(box);
+      const scopeBubble = box.querySelector(".kid-voice-bubble");
+      if (scopeBubble) {
+        scopeBubble.addEventListener("click", () => {
+          if (voiceStudio) voiceStudio.stopPlayback();
+          speak(null, {
+            toggleIfPlaying: true,
+            scopeEl: scopeBubble,
+            statusMountEl: box.querySelector(".tts-toy-status")
+          });
+        });
+      }
+      speak(null, {
+        scopeEl: scopeBubble || box,
+        statusMountEl: box.querySelector(".tts-toy-status"),
+        playTapSfx: false
+      });
+    };
+
+    const btnExp1 = document.getElementById("btnCardExp1");
+    const btnExp2 = document.getElementById("btnCardExp2");
+    const btnQuiz = document.getElementById("btnCardQuiz");
+    const btnTeleport = document.getElementById("btnCardTeleport");
+
+    if (btnExp1) btnExp1.addEventListener("click", () => runCardExp(exp1, btnExp1));
+    if (btnExp2) btnExp2.addEventListener("click", () => runCardExp(exp2, btnExp2));
+
+    if (btnQuiz && quiz) {
+      btnQuiz.addEventListener("click", () => {
+        setActiveToyBtn(btnQuiz);
+        if (voiceStudio) voiceStudio.stopPlayback();
+        if (window.SFX) window.SFX.pop();
+
+        const box = document.getElementById("toyTestResultBox");
+        // 根据卡片尾号奇偶决定正确选项放在 A 还是 B，避免固定都在第 1 个
+        const numTail = parseInt(item.id.slice(-2), 10) || 1;
+        const swapOrder = numTail % 2 === 0;
+        const opt1Text = swapOrder ? quiz.b : quiz.a;
+        const opt2Text = swapOrder ? quiz.a : quiz.b;
+        const opt1IsRight = swapOrder ? quiz.ans === "b" : quiz.ans === "a";
+        const opt2IsRight = !opt1IsRight;
+
+        box.innerHTML = `
+          <div class="card-quiz-box">
+            <div class="card-quiz-question tts-reading-scope" id="cardQuizQuestionScope" title="点击朗读题目">
+              <div class="tts-toy-status"></div>
+              <div class="tts-clauses-body">${renderClauses(quiz.q)}</div>
+            </div>
+            <div class="card-quiz-options">
+              <button type="button" class="card-quiz-opt-btn" data-right="${opt1IsRight ? "1" : "0"}">
+                🅰️ ${ruby(opt1Text)}
+              </button>
+              <button type="button" class="card-quiz-opt-btn" data-right="${opt2IsRight ? "1" : "0"}">
+                🅱️ ${ruby(opt2Text)}
+              </button>
+            </div>
+            <div id="cardQuizFeedback" style="margin-top:8px;"></div>
+          </div>
+        `;
+
+        const qScope = document.getElementById("cardQuizQuestionScope");
+        if (qScope) {
+          qScope.addEventListener("click", () => {
+            speak(null, {
+              toggleIfPlaying: true,
+              scopeEl: qScope,
+              statusMountEl: qScope.querySelector(".tts-toy-status")
+            });
+          });
+        }
+
+        box.querySelectorAll(".card-quiz-opt-btn").forEach((optBtn) => {
+          optBtn.addEventListener("click", () => {
+            const isRight = optBtn.getAttribute("data-right") === "1";
+            const fbBox = document.getElementById("cardQuizFeedback");
+            if (!fbBox) return;
+
+            if (isRight) {
+              box.querySelectorAll(".card-quiz-opt-btn").forEach((b) => b.classList.remove("picked-wrong"));
+              optBtn.classList.add("picked-right");
+              if (window.SFX) window.SFX.chime();
+
+              const firstTimeWin = !state.cardQuizWon.includes(item.id);
+              if (firstTimeWin) {
+                state.cardQuizWon.push(item.id);
+                addStars(2);
+                btnQuiz.classList.add("won");
+                const subTxt = document.getElementById("cardQuizSubText");
+                if (subTxt) {
+                  subTxt.style.color = "#4ade80";
+                  subTxt.textContent = "✅ 已闯关成功 (+2⭐)！";
+                }
+              }
+
+              fbBox.innerHTML = `
+                <div class="kid-voice-bubble tts-reading-scope" style="border-color:#4ade80;background:rgba(74,222,128,0.18);margin-top:6px;">
+                  <div class="tts-toy-status"></div>
+                  <div class="tts-clauses-body">🎉⭐ ${renderClauses(quiz.explain)}</div>
+                </div>
+              `;
+              const explainScope = fbBox.querySelector(".kid-voice-bubble");
+              speak(null, {
+                scopeEl: explainScope || fbBox,
+                statusMountEl: fbBox.querySelector(".tts-toy-status"),
+                playTapSfx: false
+              });
+            } else {
+              optBtn.classList.remove("picked-wrong");
+              void optBtn.offsetWidth;
+              optBtn.classList.add("picked-wrong");
+              if (window.SFX) window.SFX.bonk();
+              fbBox.innerHTML = `
+                <div style="font-size:0.85rem;font-weight:800;color:#fbbf24;padding:6px 4px;">
+                  💡 哎呀差一点点！再仔细想想，点另一个选项试试看吧～
+                </div>
+              `;
+            }
+          });
+        });
+      });
+    }
+
+    if (btnTeleport && teleportInfo) {
+      btnTeleport.addEventListener("click", () => {
+        if (window.SFX) window.SFX.pop();
+        document.getElementById("btnCloseSuperModal").click();
+        teleportInfo.action();
+      });
+    }
 
     const btnSpeakCard = document.getElementById("btnSpeakCard");
     btnSpeakCard.classList.remove("is-loading", "is-playing");
@@ -720,6 +889,69 @@
         window.DoubaoTTS.preloadText(`${bilingual.en} ${bilingual.en} ${bilingual.zh}`);
       }
     }
+  }
+
+  function getCardPlaygroundTeleport(item) {
+    if (!item || !item.id) return null;
+    const goBiolabSub = (sub) => {
+      switchStage("biolab");
+      const subBtn = document.querySelector(`.biolab-sub-btn[data-sub="${sub}"]`);
+      if (subBtn) subBtn.click();
+    };
+    const goEco = (sp) => {
+      goBiolabSub("ecosystem");
+      const spBtn = document.querySelector(`#ecoSpeciesTabs [data-esp="${sp}"]`);
+      if (spBtn) spBtn.click();
+    };
+    const goSurgery = (smode) => {
+      goBiolabSub("molsurgery");
+      const mBtn = document.querySelector(`.surgery-mode-btn[data-smode="${smode}"]`);
+      if (mBtn) mBtn.click();
+    };
+    const goCellReagent = (rid) => {
+      goBiolabSub("cell");
+      const card = document.querySelector(`#reagentTray [data-rid="${rid}"]`);
+      if (card) card.click();
+    };
+    const goClinicPatient = (pIdx) => {
+      switchStage("pharmacy");
+      state.clinicIdx = pIdx;
+      state.pickedBottle = null;
+      renderClinic();
+    };
+
+    const map = {
+      "ch1-09": { label: "去【借毒养成缸】亲手喂箭毒蛙宝宝！", action: () => goEco("frog") },
+      "ch6-01": { label: "去【借毒养成缸】喂养无毒河鲀宝宝！", action: () => goEco("puffer") },
+      "ch1-04": { label: "去【借毒养成缸】喂虎斑颈槽蛇攒蟾蜍毒！", action: () => goEco("snake") },
+      "ch6-02": { label: "去【3D分子手术台】把河鲀毒素插进锁孔！", action: () => goSurgery("ttx_lock") },
+      "ch6-08": { label: "去【3D分子手术台】把河鲀毒素插进锁孔！", action: () => goSurgery("ttx_lock") },
+      "ch6-09": { label: "去【3D分子手术台】把河鲀毒素插进锁孔！", action: () => goSurgery("ttx_lock") },
+      "ch3-01": { label: "去【3D分子手术台】亲手剪掉乌头碱双基团！", action: () => goSurgery("aconitine_surgery") },
+      "ch4-02": { label: "去【100°C沸水双锅台】煮熟四季豆解毒！", action: () => goSurgery("boil_duel") },
+      "ch5-01": { label: "去【活体细胞游乐场】看鹅膏铁锁卡死细胞工厂！", action: () => goCellReagent("amanitin") },
+      "ch5-11": { label: "去【活体细胞游乐场】看鹅膏铁锁卡死细胞工厂！", action: () => goCellReagent("amanitin") },
+      "ch1-06": { label: "去【活体细胞游乐场】看三指蛋白抢占受体座位！", action: () => goCellReagent("cobra") },
+      "ch6-17": { label: "去【活体细胞游乐场】看三指蛋白抢占受体座位！", action: () => goCellReagent("cobra") },
+      "ch1-03": { label: "去【活体细胞游乐场】看树蛙毒素撑开钠通道城门！", action: () => goCellReagent("frog") },
+      "ch3-14": { label: "去【活体细胞游乐场】看毒素撑开钠通道城门！", action: () => goCellReagent("frog") },
+      "ch5-14": {
+        label: "去【代谢大比拼】做墨汁鬼伞配啤酒实验！",
+        action: () => {
+          goBiolabSub("tummy");
+          if (state.tummyMode !== "mushroom") {
+            const mBtn = document.getElementById("btnSwitchMushroomMode");
+            if (mBtn) mBtn.click();
+          }
+        }
+      },
+      "ch1-05": { label: "去【化毒为药急诊室】用尖吻蝮蛇毒合成降压药！", action: () => goClinicPatient(0) },
+      "ch6-07": { label: "去【化毒为药急诊室】用芋螺毒素合成超级止痛针！", action: () => goClinicPatient(1) },
+      "ch2-05": { label: "去【化毒为药急诊室】点亮蝎毒肿瘤荧光画笔！", action: () => goClinicPatient(2) },
+      "ch3-06": { label: "去【化毒为药急诊室】用毛地黄调配微克强心片！", action: () => goClinicPatient(3) },
+      "ch3-11": { label: "去【化毒为药急诊室】用秋水仙碱消炎 & 种无籽西瓜！", action: () => goClinicPatient(4) }
+    };
+    return map[item.id] || null;
   }
 
   function renderPowerBar(label, val, color) {

@@ -991,27 +991,140 @@ html[data-theme="light"] .top-bar {
   color: #052220;
 }
 
-/* 弹窗右侧：沸水锅与胃酸剪刀迷你互动玩具 */
+/* 弹窗右侧：每张卡片专属科学互动实验台 + 考考小馆长二选一闯关 */
 .mini-test-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin: 14px 0;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.mini-test-row.three-cols {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+@media (max-width: 560px) {
+  .mini-test-row.three-cols {
+    grid-template-columns: 1fr 1fr;
+  }
+  .mini-test-row.three-cols .toy-test-btn.quiz-entry-btn {
+    grid-column: 1 / -1;
+  }
 }
 
 .toy-test-btn {
   background: var(--bg-inset);
   border: 2px solid var(--border-light);
   border-radius: 18px;
-  padding: 12px;
+  padding: 10px 8px;
   color: var(--text-main);
   font-family: inherit;
   cursor: pointer;
   text-align: center;
   transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
 }
 
 .toy-test-btn:hover { border-color: var(--c-amber); transform: translateY(-2px); }
+.toy-test-btn.active {
+  border-color: var(--c-teal);
+  background: rgba(45, 212, 191, 0.16);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.22);
+}
+.toy-test-btn.quiz-entry-btn {
+  border-color: rgba(251, 191, 36, 0.55);
+  background: linear-gradient(145deg, rgba(251, 191, 36, 0.14), rgba(192, 132, 252, 0.12));
+}
+.toy-test-btn.quiz-entry-btn.won {
+  border-color: #4ade80;
+  background: rgba(74, 222, 128, 0.14);
+}
+
+.card-quiz-box {
+  background: var(--bg-inset);
+  border: 2px solid rgba(251, 191, 36, 0.65);
+  border-radius: 20px;
+  padding: 13px 15px;
+  margin-top: 8px;
+}
+
+.card-quiz-question {
+  font-size: 0.96rem;
+  font-weight: 900;
+  line-height: 1.48;
+  color: var(--text-main);
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+.card-quiz-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.card-quiz-opt-btn {
+  appearance: none;
+  background: var(--bg-card);
+  border: 2px solid var(--border-light);
+  border-radius: 14px;
+  padding: 10px 12px;
+  color: var(--text-main);
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 800;
+  text-align: left;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.card-quiz-opt-btn:hover {
+  border-color: var(--c-amber);
+  transform: translateX(3px);
+}
+
+.card-quiz-opt-btn.picked-right {
+  border-color: #4ade80;
+  background: rgba(74, 222, 128, 0.22);
+  color: var(--text-main);
+}
+
+.card-quiz-opt-btn.picked-wrong {
+  border-color: #fb7185;
+  background: rgba(251, 113, 133, 0.2);
+  animation: shake 0.35s;
+}
+
+.card-teleport-btn {
+  appearance: none;
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px 14px;
+  border-radius: 14px;
+  border: 1.5px dashed rgba(56, 189, 248, 0.65);
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.14), rgba(45, 212, 191, 0.12));
+  color: var(--c-teal);
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 900;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.18s ease;
+}
+
+.card-teleport-btn:hover {
+  border-style: solid;
+  border-color: var(--c-amber);
+  color: var(--c-amber);
+  transform: translateY(-1px);
+}
 
 .kid-voice-bubble {
   background: linear-gradient(135deg, rgba(45, 212, 191, 0.16), rgba(56, 189, 248, 0.14));
