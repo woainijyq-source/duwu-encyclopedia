@@ -7,11 +7,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="奇妙毒物游乐园" />
-  <title>奇妙毒物科学游乐园 · 99实拍图鉴·3D分子·借毒养成·王牌对战</title>
-  <link rel="manifest" href="manifest.webmanifest?v=4.0" />
-  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=4.0" />
-  <link rel="icon" type="image/png" href="assets/icon-512.png?v=4.0" />
-  <link rel="stylesheet" href="css/styles.css?v=4.0" />
+  <title>奇妙毒物科学游乐园 · 99实拍图鉴·真实实况短片·十万个为什么·趣味英语·王牌对战</title>
+  <link rel="manifest" href="manifest.webmanifest?v=5.0" />
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=5.0" />
+  <link rel="icon" type="image/png" href="assets/icon-512.png?v=5.0" />
+  <link rel="stylesheet" href="css/styles.css?v=5.0" />
 </head>
 <body>
 
@@ -52,17 +52,18 @@
         <div id="panoramaPins"></div>
       </div>
 
-      <!-- 魔法分类滤镜球（含🎙️小馆长已配音专属滤镜！） -->
+      <!-- 魔法分类滤镜球（含🎥真实实况短片 & 🎙️小馆长已配音专属滤镜！） -->
       <div class="filter-dock">
         <div class="magic-pills" id="magicFilterBar">
           <button class="magic-pill active" data-mfilter="all">🌟 全部 99 张实拍卡</button>
+          <button class="magic-pill" data-mfilter="realvid" id="pillRealVidFilter">🎥 真实实况短片</button>
           <button class="magic-pill" data-mfilter="voiced" id="pillVoicedFilter">🎙️ 小馆长已配音 (0/99)</button>
           <button class="magic-pill" data-mfilter="neuro">⚡ 锁死神经</button>
           <button class="magic-pill" data-mfilter="blood">🩸 攻击血液</button>
           <button class="magic-pill" data-mfilter="cell">🏭 停摆细胞</button>
           <button class="magic-pill" data-mfilter="med">💊 能变救命药</button>
         </div>
-        <input type="search" id="dexSearch" class="quick-search" placeholder="🔍 搜名字（如：河鲀、鵙鹟）" />
+        <input type="search" id="dexSearch" class="quick-search" placeholder="🔍 搜中英文名（如：河鲀、Cobra、frog）" />
       </div>
 
       <!-- 原书 9 大章节图标筹码 -->
@@ -192,6 +193,7 @@
           <button class="magic-pill active det-sub-btn" data-dsub="battler">🃏 游戏1：大百科 99 王牌生化对战</button>
           <button class="magic-pill det-sub-btn" data-dsub="hunt" id="btnDetHuntTab">👀 游戏2：四大场景找毒物（0/25）</button>
           <button class="magic-pill det-sub-btn" data-dsub="flashpk">📸 游戏3：看真身照片 · 抢答目录</button>
+          <button class="magic-pill det-sub-btn" data-dsub="liveen">🎬🇬🇧 游戏4：实况侦探 &amp; 毒物英语闯关</button>
         </div>
         <div id="huntToolbar" style="display:none;gap:8px;">
           <button class="mini-btn on" id="btnHuntHint">💡 放大镜提示</button>
@@ -221,27 +223,37 @@
       <div id="detFlashPanel" style="display:none;">
         <div class="flashcard-arena" id="flashcardArena"></div>
       </div>
+
+      <!-- 子游戏 4（v5.0新增）：真实实况观察侦探 & 毒物英语听力大闯关 -->
+      <div id="detLiveEnPanel" style="display:none;">
+        <div id="liveEnArenaMount"></div>
+      </div>
     </section>
 
   </main>
 
-  <!-- ==================== 超级视觉闪卡弹窗 (实拍大图 + 全书99卡3D分子 + 小馆长录音间 + 沸水/胃酸实验) ==================== -->
+  <!-- ==================== 超级视觉闪卡弹窗 (实拍大图 + 真实实况短片 + 施毒动画 + 3D分子 + 十万个为什么 + 趣味英语) ==================== -->
   <div class="card-modal-backdrop" id="superCardModal" role="dialog" aria-modal="true">
     <div class="super-card-modal">
       <button class="close-circle-btn" id="btnCloseSuperModal" aria-label="关闭">✕</button>
       <div class="super-card-grid">
-        <!-- 左半边：高清实拍照片 & 施毒实况短片 & 真 3D 旋转分子 -->
+        <!-- 左半边：高清实拍照片 & 真实实况短片 & 施毒原理动画 & 真 3D 旋转分子 -->
         <div>
           <div class="visual-showcase-box">
             <img id="modalPhotoImg" class="showcase-photo" src="" alt="" />
+            <video id="modalRealVideo" class="showcase-video" playsinline controls loop preload="metadata"></video>
             <video id="modalActionVideo" class="showcase-video" playsinline controls loop preload="metadata"></video>
             <canvas id="mol3dCanvas"></canvas>
           </div>
-          <div class="view-toggle-pills" id="modalViewSwitch">
-            <button class="view-pill active" data-vmode="photo">📸 看高清真身</button>
-            <button class="view-pill video-pill-highlight" id="btnSwitchActionVideo" data-vmode="video">🎬 看施毒视频</button>
-            <button class="view-pill" id="btnSwitch3DMol" data-vmode="mol3d">🧬 转 3D 分子</button>
+          <div class="view-toggle-pills four-modes" id="modalViewSwitch">
+            <button class="view-pill active" data-vmode="photo">📸 高清真身</button>
+            <button class="view-pill real-video-pill-highlight" id="btnSwitchRealVideo" data-vmode="realvideo">🎥 真实实况</button>
+            <button class="view-pill video-pill-highlight" id="btnSwitchActionVideo" data-vmode="video">🔬 施毒动画</button>
+            <button class="view-pill" id="btnSwitch3DMol" data-vmode="mol3d">🧬 3D分子</button>
           </div>
+
+          <!-- v5.0：真实实况短片同步纪录片解说 & 眼力小侦探互动栏 -->
+          <div id="modalRealVideoCompanion"></div>
           <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;gap:8px;flex-wrap:wrap;">
             <span id="modalCodeBadge" class="mini-btn" style="pointer-events:none;"></span>
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -282,21 +294,24 @@
     </div>
   </div>
 
-  <script src="js/data-catalog.js?v=4.0"></script>
-  <script src="js/data-bilingual.js?v=4.0"></script>
-  <script src="js/data-card-interactions.js?v=4.0"></script>
-  <script src="js/data-tts-manifest.js?v=4.0"></script>
-  <script src="js/data-photos.js?v=4.0"></script>
-  <script src="js/data-molecules3d.js?v=4.0"></script>
-  <script src="js/data-labs.js?v=4.0"></script>
-  <script src="js/data-hunt-scenes.js?v=4.0"></script>
-  <script src="js/visualizers.js?v=4.0"></script>
-  <script src="js/doubao-tts.js?v=4.0"></script>
-  <script src="js/ai-companion.js?v=4.0"></script>
-  <script src="js/upgrade1-ecosystem.js?v=4.0"></script>
-  <script src="js/upgrade2-molsurgery.js?v=4.0"></script>
-  <script src="js/upgrade3-battler.js?v=4.0"></script>
-  <script src="js/upgrade4-voice.js?v=4.0"></script>
-  <script src="js/app.js?v=4.0"></script>
+  <script src="js/data-catalog.js?v=5.0"></script>
+  <script src="js/data-bilingual.js?v=5.0"></script>
+  <script src="js/data-real-videos.js?v=5.0"></script>
+  <script src="js/data-curiosity-english.js?v=5.0"></script>
+  <script src="js/data-card-interactions.js?v=5.0"></script>
+  <script src="js/data-tts-manifest.js?v=5.0"></script>
+  <script src="js/data-photos.js?v=5.0"></script>
+  <script src="js/data-molecules3d.js?v=5.0"></script>
+  <script src="js/data-labs.js?v=5.0"></script>
+  <script src="js/data-hunt-scenes.js?v=5.0"></script>
+  <script src="js/visualizers.js?v=5.0"></script>
+  <script src="js/doubao-tts.js?v=5.0"></script>
+  <script src="js/ai-companion.js?v=5.0"></script>
+  <script src="js/upgrade1-ecosystem.js?v=5.0"></script>
+  <script src="js/upgrade2-molsurgery.js?v=5.0"></script>
+  <script src="js/upgrade3-battler.js?v=5.0"></script>
+  <script src="js/upgrade4-voice.js?v=5.0"></script>
+  <script src="js/upgrade5-english-live.js?v=5.0"></script>
+  <script src="js/app.js?v=5.0"></script>
 </body>
 </html>

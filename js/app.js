@@ -149,6 +149,9 @@
     curedIds: [],
     surgeryWon: [],
     cardQuizWon: [],
+    unlockedCuriosities: [],
+    wonSpotChallenges: [],
+    wonEnShadowing: [],
     pkStreak: 0,
     stars: 0,
 
@@ -178,6 +181,7 @@
   let molSurgery = null;
   let ecoSandbox = null;
   let cardBattler = null;
+  let liveEnArena = null;
   let voiceStudio = null;
   let aiCompanion = null;
   let currentOpenCard = null;
@@ -193,6 +197,9 @@
       state.curedIds = s.curedIds || [];
       state.surgeryWon = s.surgeryWon || [];
       state.cardQuizWon = s.cardQuizWon || [];
+      state.unlockedCuriosities = s.unlockedCuriosities || [];
+      state.wonSpotChallenges = s.wonSpotChallenges || [];
+      state.wonEnShadowing = s.wonEnShadowing || [];
       state.stars = s.stars || 0;
       if (s.theme) state.theme = s.theme;
     } catch (_) {}
@@ -206,6 +213,9 @@
         curedIds: state.curedIds,
         surgeryWon: state.surgeryWon,
         cardQuizWon: state.cardQuizWon,
+        unlockedCuriosities: state.unlockedCuriosities,
+        wonSpotChallenges: state.wonSpotChallenges,
+        wonEnShadowing: state.wonEnShadowing,
         stars: state.stars,
         theme: state.theme
       }));
@@ -340,6 +350,9 @@
 
   function switchStage(st) {
     state.stage = st;
+    if (st !== "detective" && liveEnArena) {
+      liveEnArena.stopMedia();
+    }
     document.querySelectorAll(".stage-tab").forEach((b) => {
       b.classList.toggle("active", b.getAttribute("data-stage") === st);
     });
@@ -417,6 +430,12 @@
       renderPhotoDex();
     });
 
+    const rvPill = document.getElementById("pillRealVidFilter");
+    if (rvPill && window.REAL_VIDEOS) {
+      const rvCnt = Object.keys(window.REAL_VIDEOS).length;
+      if (rvCnt > 0) rvPill.textContent = `🎥 真实实况短片 (${rvCnt})`;
+    }
+
     renderPhotoDex();
   }
 
@@ -427,13 +446,16 @@
 
     const list = window.CATALOG_DATA.filter((item) => {
       if (state.chFilter !== "all" && item.chapter !== state.chFilter) return false;
+      if (state.magicFilter === "realvid" && !(window.REAL_VIDEOS && window.REAL_VIDEOS[item.id])) return false;
       if (state.magicFilter === "voiced" && !(voiceStudio && voiceStudio.hasVoice(item.id))) return false;
       if (state.magicFilter === "neuro" && item.mech !== "neuro") return false;
       if (state.magicFilter === "blood" && item.mech !== "blood") return false;
       if (state.magicFilter === "cell" && item.mech !== "cell") return false;
       if (state.magicFilter === "med" && !medIds.has(item.id)) return false;
       if (state.search) {
-        const hay = `${item.name} ${item.code} ${item.molecule}`.toLowerCase();
+        const ce = (window.CURIOSITY_ENGLISH_DATA && window.CURIOSITY_ENGLISH_DATA[item.id]) || {};
+        const vocabStr = Array.isArray(ce.vocab) ? ce.vocab.map((v) => `${v.w} ${v.zh}`).join(" ") : "";
+        const hay = `${item.name} ${item.code} ${item.molecule} ${ce.enName || ""} ${vocabStr}`.toLowerCase();
         if (!hay.includes(state.search)) return false;
       }
       return true;
@@ -465,6 +487,8 @@
       const lit = state.litCards.includes(item.id);
       const voiceCount = voiceStudio && voiceStudio.getVoiceCount ? voiceStudio.getVoiceCount(item.id) : (voiceStudio && voiceStudio.hasVoice(item.id) ? 1 : 0);
       const voiced = voiceCount > 0;
+      const hasRealVid = Boolean(window.REAL_VIDEOS && window.REAL_VIDEOS[item.id]);
+      const ce = (window.CURIOSITY_ENGLISH_DATA && window.CURIOSITY_ENGLISH_DATA[item.id]) || null;
       const shortCode = item.code.replace("第", "").replace("章 · 档案", "-").replace("序-0", "序");
 
       return `
@@ -476,13 +500,20 @@
                 : `<div class="dex-fallback-art">${item.emoji}</div>`
             }
             <span class="dex-num-badge">${shortCode} ${lit ? "⭐" : ""}</span>
-            <span class="dex-3d-badge">🎬 施毒视频 · 3D</span>
+            ${
+              hasRealVid
+                ? `<span class="dex-3d-badge" style="background:linear-gradient(135deg,rgba(16,185,129,0.92),rgba(14,165,233,0.92));color:#fff;">🎥 真实实况 · 3D</span>`
+                : `<span class="dex-3d-badge">🔬 施毒动画 · 3D</span>`
+            }
             ${voiced ? `<span class="dex-voice-badge">🎙️ 已配音${voiceCount > 1 ? ` ×${voiceCount}` : ""}</span>` : ""}
             <span class="dex-mech-dot" style="background:${mb.bg};">${mb.txt}</span>
           </div>
           <div class="dex-info">
-            <h3 class="dex-title">${ruby(item.name)}</h3>
-            <span style="font-size:1.2rem;">${item.strategy === "venom" ? "🗡️" : item.strategy === "poison" ? "🛡️" : "💎"}</span>
+            <div style="min-width:0;">
+              <h3 class="dex-title">${ruby(item.name)}</h3>
+              ${ce && ce.enName ? `<div style="font-size:0.73rem;color:var(--c-teal);font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">🇬🇧 ${ce.enName}</div>` : ""}
+            </div>
+            <span style="font-size:1.2rem;flex-shrink:0;">${item.strategy === "venom" ? "🗡️" : item.strategy === "poison" ? "🛡️" : "💎"}</span>
           </div>
         </div>
       `;
@@ -514,24 +545,33 @@
 
     const photo = getPhoto(id);
     const molData = getMol3DData(id);
+    const realVid = (window.REAL_VIDEOS && window.REAL_VIDEOS[id]) || null;
 
     const imgEl = document.getElementById("modalPhotoImg");
+    const realVideoEl = document.getElementById("modalRealVideo");
     const videoEl = document.getElementById("modalActionVideo");
     const canvas3d = document.getElementById("mol3dCanvas");
+    const btnRealVid = document.getElementById("btnSwitchRealVideo");
     const btn3d = document.getElementById("btnSwitch3DMol");
+    const switchWrap = document.getElementById("modalViewSwitch");
 
     imgEl.src = photo || "assets/scenes/panorama.jpg";
-    imgEl.style.display = "block";
+    if (realVideoEl) {
+      realVideoEl.pause();
+      realVideoEl.src = realVid ? realVid.src : "";
+      realVideoEl.style.display = "none";
+    }
+    if (btnRealVid) {
+      btnRealVid.style.display = realVid ? "inline-block" : "none";
+    }
+    if (switchWrap) {
+      switchWrap.classList.toggle("four-modes", Boolean(realVid));
+    }
     if (videoEl) {
       videoEl.pause();
       videoEl.src = `assets/videos/${id}.mp4`;
       videoEl.style.display = "none";
     }
-    canvas3d.style.display = "none";
-
-    document.querySelectorAll("#modalViewSwitch .view-pill").forEach((p) => {
-      p.classList.toggle("active", p.getAttribute("data-vmode") === "photo");
-    });
 
     if (molData) {
       btn3d.style.display = "inline-block";
@@ -542,6 +582,10 @@
     } else {
       btn3d.style.display = "none";
     }
+
+    // 若小朋友当前正在【🎥 真实实况短片】滤镜下浏览，点开卡片自动直接播放真实实况短片！
+    const initialMode = state.magicFilter === "realvid" && realVid ? "realvideo" : "photo";
+    setModalViewMode(initialMode);
 
     document.getElementById("modalCodeBadge").textContent = `📖 ${item.code}`;
 
@@ -618,6 +662,9 @@
       </div>
 
       <div id="toyTestResultBox" style="min-height:54px;"></div>
+
+      <!-- v5.0：好奇宝宝「十万个为什么」深度语音讲解 + 🇬🇧 趣味英语小课堂 -->
+      <div id="modalCuriosityAndEnglishMount"></div>
 
       ${
         teleportInfo
@@ -857,6 +904,7 @@
 
     const triggerMainCardSpeech = () => {
       if (voiceStudio) voiceStudio.stopPlayback();
+      if (window.CuriosityEnglishModule) window.CuriosityEnglishModule.stopShadowing();
       const vEl = document.getElementById("modalActionVideo");
       if (vEl && !vEl.paused) vEl.pause();
       speak(null, {
@@ -867,6 +915,23 @@
         defaultBtnHTML: "🔊 给我讲解"
       });
     };
+
+    // 挂载 v5.0 实况短片解说、十万个为什么与趣味英语小课堂
+    if (window.CuriosityEnglishModule && window.CuriosityEnglishModule.mountCardExtensions) {
+      window.CuriosityEnglishModule.mountCardExtensions({
+        item,
+        ruby,
+        speak,
+        renderClauses,
+        addStars,
+        state,
+        saveState,
+        stopVoiceStudio: () => {
+          if (voiceStudio) voiceStudio.stopPlayback();
+        },
+        switchToRealVideo: (vOpts) => setModalViewMode("realvideo", vOpts)
+      });
+    }
 
     btnSpeakCard.onclick = triggerMainCardSpeech;
     const mainBubbleEl = document.getElementById("modalMainBubble");
@@ -973,35 +1038,68 @@
     `;
   }
 
+  function setModalViewMode(vmode, opts) {
+    const o = opts || {};
+    document.querySelectorAll("#modalViewSwitch .view-pill").forEach((p) => {
+      p.classList.toggle("active", p.getAttribute("data-vmode") === vmode);
+    });
+
+    const imgEl = document.getElementById("modalPhotoImg");
+    const realVideoEl = document.getElementById("modalRealVideo");
+    const videoEl = document.getElementById("modalActionVideo");
+    const canvas3d = document.getElementById("mol3dCanvas");
+
+    if (imgEl) imgEl.style.display = vmode === "photo" ? "block" : "none";
+    if (realVideoEl) realVideoEl.style.display = vmode === "realvideo" ? "block" : "none";
+    if (videoEl) videoEl.style.display = vmode === "video" ? "block" : "none";
+    if (canvas3d) canvas3d.style.display = vmode === "mol3d" ? "block" : "none";
+
+    if (realVideoEl) {
+      if (vmode === "realvideo") {
+        if (!o.muteForNarration) {
+          if (voiceStudio) voiceStudio.stopPlayback();
+          realVideoEl.muted = !state.sound;
+        } else {
+          realVideoEl.muted = true;
+        }
+        try {
+          if (realVideoEl.paused) {
+            realVideoEl.currentTime = 0;
+            const p = realVideoEl.play();
+            if (p && typeof p.catch === "function") {
+              p.catch(() => {
+                realVideoEl.muted = true;
+                realVideoEl.play().catch(() => {});
+              });
+            }
+          }
+        } catch (_) {}
+      } else {
+        realVideoEl.pause();
+      }
+    }
+
+    if (videoEl) {
+      if (vmode === "video") {
+        if (window.DoubaoTTS) window.DoubaoTTS.stop();
+        if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+        if (voiceStudio) voiceStudio.stopPlayback();
+        try {
+          videoEl.currentTime = 0;
+          videoEl.play().catch(() => {});
+        } catch (_) {}
+      } else {
+        videoEl.pause();
+      }
+    }
+  }
+
   function initSuperModalEvents() {
     document.querySelectorAll("#modalViewSwitch .view-pill").forEach((pill) => {
       pill.addEventListener("click", () => {
         window.SFX.pop();
         const vmode = pill.getAttribute("data-vmode");
-        document.querySelectorAll("#modalViewSwitch .view-pill").forEach((p) => p.classList.remove("active"));
-        pill.classList.add("active");
-
-        const imgEl = document.getElementById("modalPhotoImg");
-        const videoEl = document.getElementById("modalActionVideo");
-        const canvas3d = document.getElementById("mol3dCanvas");
-
-        if (imgEl) imgEl.style.display = vmode === "photo" ? "block" : "none";
-        if (videoEl) videoEl.style.display = vmode === "video" ? "block" : "none";
-        if (canvas3d) canvas3d.style.display = vmode === "mol3d" ? "block" : "none";
-
-        if (videoEl) {
-          if (vmode === "video") {
-            if (window.DoubaoTTS) window.DoubaoTTS.stop();
-            if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-            if (voiceStudio) voiceStudio.stopPlayback();
-            try {
-              videoEl.currentTime = 0;
-              videoEl.play().catch(() => {});
-            } catch (_) {}
-          } else {
-            videoEl.pause();
-          }
-        }
+        setModalViewMode(vmode);
       });
     });
 
@@ -1013,9 +1111,16 @@
       }
       if (window.DoubaoTTS) window.DoubaoTTS.stop();
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      if (window.CuriosityEnglishModule) {
+        window.CuriosityEnglishModule.stopShadowing();
+      }
       if (voiceStudio) {
         voiceStudio.stopActiveRecording();
         voiceStudio.stopPlayback();
+      }
+      const realVideoEl = document.getElementById("modalRealVideo");
+      if (realVideoEl) {
+        realVideoEl.pause();
       }
       const videoEl = document.getElementById("modalActionVideo");
       if (videoEl) {
@@ -1477,6 +1582,20 @@
       );
     }
 
+    // 初始化 v5.0 实况观察侦探 & 毒物英语大闯关
+    if (window.CuriosityEnglishModule && window.CuriosityEnglishModule.LiveEnglishArena) {
+      liveEnArena = new window.CuriosityEnglishModule.LiveEnglishArena(
+        document.getElementById("liveEnArenaMount"),
+        {
+          ruby,
+          getPhoto,
+          speak,
+          onWinStars: (n) => addStars(n),
+          onOpenCard: (aid) => openSuperCard(aid)
+        }
+      );
+    }
+
     document.querySelectorAll(".det-sub-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
         window.SFX.pop();
@@ -1488,7 +1607,14 @@
         document.getElementById("detHuntPanel").style.display = dsub === "hunt" ? "block" : "none";
         document.getElementById("huntToolbar").style.display = dsub === "hunt" ? "flex" : "none";
         document.getElementById("detFlashPanel").style.display = dsub === "flashpk" ? "block" : "none";
+        const liveEnPanel = document.getElementById("detLiveEnPanel");
+        if (liveEnPanel) liveEnPanel.style.display = dsub === "liveen" ? "block" : "none";
         if (dsub === "flashpk" && !state.pkAnswer) nextFlashcardPK();
+        if (dsub === "liveen" && liveEnArena) {
+          if (!liveEnArena.currentAnswer) liveEnArena.init();
+        } else if (liveEnArena) {
+          liveEnArena.stopMedia();
+        }
       });
     });
 

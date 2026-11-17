@@ -855,12 +855,17 @@
         this._startHighlightLoop();
         await this.audio.play();
       } catch (_) {
+        if (waitTimer) {
+          clearTimeout(waitTimer);
+          waitTimer = null;
+        }
         if (myToken !== this.reqToken || !this.enabled) return;
         // 离线且未缓存时降级系统内置语音，同时维持逐句放大高亮！
         if ("speechSynthesis" in window) {
           try {
             window.speechSynthesis.cancel();
-            const estDur = Math.max(2, key.length * 0.24);
+            const hasChinese = /[\u4e00-\u9fff]/.test(key);
+            const estDur = Math.max(1.8, hasChinese ? key.length * 0.24 : key.length * 0.09);
             this.usingHtmlAudio = false;
             this.usingSpeechSynth = true;
             this.fallbackStartMs = performance.now();
@@ -873,8 +878,8 @@
               );
             }
             const u = new SpeechSynthesisUtterance(key);
-            u.lang = "zh-CN";
-            u.rate = 0.98;
+            u.lang = hasChinese ? "zh-CN" : "en-US";
+            u.rate = hasChinese ? 0.98 : 0.9;
             u.pitch = 1.06;
             u.onend = () => {
               if (myToken === this.reqToken) this._finishPlayback();
