@@ -378,6 +378,8 @@
           this.stopPlayback();
           if (window.DoubaoTTS) window.DoubaoTTS.stop();
           if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+          const actionVid = document.getElementById("modalActionVideo");
+          if (actionVid && !actionVid.paused) actionVid.pause();
 
           let srcUrl = "";
           let revokeAfter = false;
@@ -506,6 +508,8 @@
             this.stopPlayback();
             if (window.DoubaoTTS) window.DoubaoTTS.stop();
             if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+            const actionVid = document.getElementById("modalActionVideo");
+            if (actionVid && !actionVid.paused) actionVid.pause();
 
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === "undefined") {
               renderBar("⚠️ 当前浏览器未开启麦克风权限（请用 HTTPS 或 Safari/Chrome 打开）");

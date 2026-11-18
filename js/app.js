@@ -255,6 +255,10 @@
 
   function speak(text, opts) {
     if (!state.sound) return;
+    const actionVid = document.getElementById("modalActionVideo");
+    if (actionVid && !actionVid.paused) {
+      actionVid.pause();
+    }
     if (window.DoubaoTTS) {
       window.DoubaoTTS.speak(text, opts);
       return;
@@ -432,8 +436,8 @@
 
     const rvPill = document.getElementById("pillRealVidFilter");
     if (rvPill && window.REAL_VIDEOS) {
-      const rvCnt = Object.keys(window.REAL_VIDEOS).length;
-      if (rvCnt > 0) rvPill.textContent = `🎥 真实实况短片 (${rvCnt})`;
+      const camCnt = Object.values(window.REAL_VIDEOS).filter((v) => v && v.kind !== "realistic_scene").length;
+      if (camCnt > 0) rvPill.textContent = `🎥 野外真实实拍 (${camCnt})`;
     }
 
     renderPhotoDex();
@@ -446,7 +450,10 @@
 
     const list = window.CATALOG_DATA.filter((item) => {
       if (state.chFilter !== "all" && item.chapter !== state.chFilter) return false;
-      if (state.magicFilter === "realvid" && !(window.REAL_VIDEOS && window.REAL_VIDEOS[item.id])) return false;
+      if (state.magicFilter === "realvid") {
+        const rv = window.REAL_VIDEOS && window.REAL_VIDEOS[item.id];
+        if (!rv || rv.kind === "realistic_scene") return false;
+      }
       if (state.magicFilter === "voiced" && !(voiceStudio && voiceStudio.hasVoice(item.id))) return false;
       if (state.magicFilter === "neuro" && item.mech !== "neuro") return false;
       if (state.magicFilter === "blood" && item.mech !== "blood") return false;
@@ -487,7 +494,8 @@
       const lit = state.litCards.includes(item.id);
       const voiceCount = voiceStudio && voiceStudio.getVoiceCount ? voiceStudio.getVoiceCount(item.id) : (voiceStudio && voiceStudio.hasVoice(item.id) ? 1 : 0);
       const voiced = voiceCount > 0;
-      const hasRealVid = Boolean(window.REAL_VIDEOS && window.REAL_VIDEOS[item.id]);
+      const rvObj = (window.REAL_VIDEOS && window.REAL_VIDEOS[item.id]) || null;
+      const isCameraVid = Boolean(rvObj && rvObj.kind !== "realistic_scene");
       const ce = (window.CURIOSITY_ENGLISH_DATA && window.CURIOSITY_ENGLISH_DATA[item.id]) || null;
       const shortCode = item.code.replace("第", "").replace("章 · 档案", "-").replace("序-0", "序");
 
@@ -501,9 +509,9 @@
             }
             <span class="dex-num-badge">${shortCode} ${lit ? "⭐" : ""}</span>
             ${
-              hasRealVid
-                ? `<span class="dex-3d-badge" style="background:linear-gradient(135deg,rgba(16,185,129,0.92),rgba(14,165,233,0.92));color:#fff;">🎥 真实实况 · 3D</span>`
-                : `<span class="dex-3d-badge">🔬 施毒动画 · 3D</span>`
+              isCameraVid
+                ? `<span class="dex-3d-badge" style="background:linear-gradient(135deg,rgba(16,185,129,0.92),rgba(14,165,233,0.92));color:#fff;">🎥 真实实拍 · 配音剧场</span>`
+                : `<span class="dex-3d-badge" style="background:linear-gradient(135deg,rgba(14,165,233,0.92),rgba(99,102,241,0.92));color:#fff;">🎨 写实短片 · 配音剧场</span>`
             }
             ${voiced ? `<span class="dex-voice-badge">🎙️ 已配音${voiceCount > 1 ? ` ×${voiceCount}` : ""}</span>` : ""}
             <span class="dex-mech-dot" style="background:${mb.bg};">${mb.txt}</span>
@@ -563,6 +571,8 @@
     }
     if (btnRealVid) {
       btnRealVid.style.display = realVid ? "inline-block" : "none";
+      btnRealVid.textContent =
+        realVid && realVid.kind === "realistic_scene" ? "🎨 写实短片" : "🎥 真实实拍";
     }
     if (switchWrap) {
       switchWrap.classList.toggle("four-modes", Boolean(realVid));
@@ -636,6 +646,9 @@
           <div class="tts-clauses-body">💬 ${renderClauses(item.summary, bilingual)}</div>
         </div>
       </div>
+
+      <!-- v6.0：🏠 生活中的真实实例 · 写实插画伴读区 -->
+      <div id="modalLifeExampleMount"></div>
 
       <div class="mini-test-row ${quiz ? "three-cols" : ""}">
         <button type="button" class="toy-test-btn" id="btnCardExp1">
@@ -929,7 +942,14 @@
         stopVoiceStudio: () => {
           if (voiceStudio) voiceStudio.stopPlayback();
         },
-        switchToRealVideo: (vOpts) => setModalViewMode("realvideo", vOpts)
+        switchToRealVideo: (vOpts) => setModalViewMode("realvideo", vOpts),
+        switchToStoryVideo: () => {
+          setModalViewMode("video");
+          const box = document.querySelector("#superCardModal .visual-showcase-box");
+          if (box && typeof box.scrollIntoView === "function") {
+            box.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          }
+        }
       });
     }
 
@@ -955,11 +975,20 @@
       }
     }
 
-    // 打开卡片瞬间后台预加载并解码本卡内置语音，点「🔊 给我讲解」0毫秒直接出声音！
+    // 打开卡片瞬间后台预加载并解码本卡内置语音，点「🔊 给我讲解」与「🏠 生活实例」0毫秒直接出声音！
     if (window.DoubaoTTS && window.DoubaoTTS.preloadScope) {
       window.DoubaoTTS.preloadScope(document.getElementById("modalCardSpeechScope"));
       if (bilingual) {
         window.DoubaoTTS.preloadText(`${bilingual.en} ${bilingual.en} ${bilingual.zh}`);
+      }
+      const ceExtra = window.CURIOSITY_ENGLISH_DATA && window.CURIOSITY_ENGLISH_DATA[item.id];
+      if (ceExtra) {
+        if (ceExtra.lifeTitle && ceExtra.lifeStory) {
+          window.DoubaoTTS.preloadText(`${ceExtra.lifeTitle}。${ceExtra.lifeStory}`);
+        }
+        if (ceExtra.liveCommentary) {
+          window.DoubaoTTS.preloadText(ceExtra.liveCommentary);
+        }
       }
     }
   }
@@ -1083,10 +1112,18 @@
       if (vmode === "video") {
         if (window.DoubaoTTS) window.DoubaoTTS.stop();
         if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+        if (window.CuriosityEnglishModule) window.CuriosityEnglishModule.stopShadowing();
         if (voiceStudio) voiceStudio.stopPlayback();
+        videoEl.muted = !state.sound;
         try {
           videoEl.currentTime = 0;
-          videoEl.play().catch(() => {});
+          const vp = videoEl.play();
+          if (vp && typeof vp.catch === "function") {
+            vp.catch(() => {
+              videoEl.muted = true;
+              videoEl.play().catch(() => {});
+            });
+          }
         } catch (_) {}
       } else {
         videoEl.pause();

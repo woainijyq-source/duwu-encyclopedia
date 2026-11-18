@@ -3105,3 +3105,111 @@ html[data-theme="light"] .tts-clause-inline-en {
   font-size: 0.78rem;
   font-weight: 800;
 }
+
+/* ============================================================================
+   v6.0：写实科学生活插画 + 「🏠 生活中的真实实例 · 姐姐细细讲」伴读卡
+   ============================================================================ */
+.rv-authentic-tag.realistic_scene {
+  background: linear-gradient(135deg, #0ea5e9, #6366f1);
+  color: #fff;
+}
+
+.life-example-card {
+  margin: 12px 0;
+  padding: 13px 14px;
+  border-radius: 18px;
+  background: linear-gradient(145deg, rgba(251, 191, 36, 0.13), rgba(45, 212, 191, 0.11));
+  border: 2px solid rgba(251, 191, 36, 0.48);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.16);
+}
+
+html[data-theme="light"] .life-example-card {
+  background: linear-gradient(145deg, rgba(254, 243, 199, 0.78), rgba(204, 251, 241, 0.65));
+  border-color: rgba(245, 158, 11, 0.55);
+}
+
+.life-example-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.life-example-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.life-scene-tag {
+  display: inline-block;
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 0.74rem;
+  font-weight: 900;
+  background: rgba(251, 191, 36, 0.25);
+  color: #fde047;
+  border: 1px solid rgba(251, 191, 36, 0.55);
+}
+
+html[data-theme="light"] .life-scene-tag {
+  color: #92400e;
+  background: rgba(251, 191, 36, 0.35);
+}
+
+.life-example-title {
+  font-size: 0.96rem;
+  font-weight: 900;
+  color: var(--text-main);
+}
+
+.life-example-illu-wrap {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  margin-bottom: 10px;
+  cursor: pointer;
+  background: #0f172a;
+}
+
+.life-example-illu-img {
+  width: 100%;
+  max-height: 196px;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.28s ease;
+}
+
+.life-example-illu-wrap:hover .life-example-illu-img {
+  transform: scale(1.03);
+}
+
+.life-example-play-badge {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 5px 12px;
+  border-radius: 99px;
+  background: rgba(15, 23, 42, 0.86);
+  border: 1.5px solid rgba(250, 204, 21, 0.85);
+  color: #fef08a;
+  font-size: 0.78rem;
+  font-weight: 900;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+}
+
+.life-example-story-bubble {
+  margin-top: 0 !important;
+  border-color: rgba(251, 191, 36, 0.55) !important;
+  background: rgba(15, 23, 42, 0.42) !important;
+  cursor: pointer;
+}
+
+html[data-theme="light"] .life-example-story-bubble {
+  background: rgba(255, 255, 255, 0.85) !important;
+}

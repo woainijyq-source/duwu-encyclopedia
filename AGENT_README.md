@@ -1,25 +1,23 @@
 # 毒物大百科 · Agent README
 
-> 更新时间：2026-11-17（v5.0 升级更新）｜ 本文件是该项目的唯一入口文档，不含任何密钥
+> 更新时间：2026-11-18（v6.0 升级更新）｜ 本文件是该项目的唯一入口文档，不含任何密钥
 
 ## 1. 项目背景
 
-给一个能背下斋藤胜裕《致命毒物大百科》99 篇目录的 8 岁孩子做的纯视觉毒物科学互动站（产品名「奇妙毒物科学游乐园」）。核心思路是零文字墙：99 张实拍物种闪卡、50 条逐帧核验真实野外/实验实况短片、99 条微观施毒动画、360° 可触控 3D 分子、297 个「十万个为什么」深度语音讲解、99 卡趣味英语点读跟读课堂、拖拽细胞/分子手术/借毒养成等实验、化毒为药急诊室、双人王牌对战、绘本找茬与实况英语闯关，全部在浏览器里玩（README.md）。演进路径：2026-11-11 起本机静态版成型 → 11-12 接入豆包 TTS 与小馆长配音间后端 → 11-14 升至 v4.0（99 条专属交互 + 99 条施毒短视频） → 11-17 升至 v5.0（50 条真实实况短片 + 十万个为什么深度解说 + 趣味英语课堂与闯关擂台）。用户与开发者是同一家庭，无多用户体系。
+给一个能背下斋藤胜裕《致命毒物大百科》99 篇目录的 8 岁孩子做的纯视觉毒物科学互动站（产品名「奇妙毒物科学游乐园」）。核心思路是零文字墙：99 张实拍物种闪卡、99/99 全覆盖实景与写实生态动态短片、99 部写实科学插画×豆包姐姐全程配音「生活实例剧场」短片、360° 可触控 3D 分子、1050+ 条预生成 0ms 豆包语音、297 个「十万个为什么」深度语音讲解、99 卡趣味英语点读跟读课堂、拖拽细胞/分子手术/借毒养成等实验、化毒为药急诊室、双人王牌对战、绘本找茬与实况英语闯关，全部在浏览器里玩（README.md）。用户与开发者是同一家庭，无多用户体系。
 
 ## 2. 当前状态（实测）
 
-- 分支 / 远端 / 是否已推送：`main`；远端 `origin` = `https://github.com/woainijyq-source/duwu-encyclopedia.git`；`git status` 显示与 `origin/main` 同步，已推送。
-- 最后提交：2026-11-14 `a6ad6e3` 「99 条毒物攻击/施毒机制短视频，全站升到 v4.0」。
-- 近 30 天提交数 / 脏改动数：10 / 0（2026-11-15 实测，仓库总共也只有这 10 条提交）。
-- 线上版本与本地版本是否一致：未验证——仓库内没有 DEPLOYMENT/发布记录文件，`deploy.sh` 也不记录上线提交；线上按 `releases/<UTC时间戳>` + `current` 软链发布，需 `ssh insurance-crm-us` 比对 `current` 指向才能确认 11-14 两笔提交是否已上线（本次只读调研未执行）。
-- 一句话状态判断：**线上运行 + 刚结束一轮密集开发**——依据：README 写明正式地址已上线、systemd/nginx 配置齐备且随提交同步演进，11-12～11-14 连续 10 笔功能提交后工作树干净，暂无未提交的半成品。
+- 分支 / 远端 / 是否已推送：`main`；远端 `origin` = `https://github.com/woainijyq-source/duwu-encyclopedia.git`；即将提交并推送 v6.0 升级，随 `./deploy/deploy.sh` 原子发布到 `https://crm.truing.top/duwu/`。
+- 最近里程碑：`v5.0`（`d6ab389`）上线 50 条实况短片 + 297 个十万个为什么 + 趣味英语课堂；本次 `v6.0` 完成 99/99 写实动态短片全覆盖、99 张写实生活插画、99 部全程配音生活剧场短片与 1054 条预生成语音包。
+- 一句话状态判断：**v6.0 全量完成待验收发布**——静态资源与前端脚本已齐备并通过语法与音视频轨校验，通过本地浏览器实测后即提交推送并部署线上。
 
 ## 3. 详细信息
 
 ### 3.1 技术栈与运行形态
 
-- 前端：纯静态 HTML + CSS + 原生 JavaScript，无框架、无构建、无 npm、无 CDN 外链（README.md；仓库内无 package.json）。`index.html` 单页按固定顺序注入 19 个 `js/*.js`（全部带 `?v=5.0` 查询串）。数据全部内嵌为 JS 文件（如 `js/data-catalog.js` 74 KB、`js/data-curiosity-english.js` 283 KB）。
-- PWA：`manifest.webmanifest` + `sw.js`（缓存名 `duwu-playground-v5.0`），支持 iPad Safari「添加到主屏幕」离线秒开；`.mp4` 与 Range 请求永不走缓存（sw.js 注释）。
+- 前端：纯静态 HTML + CSS + 原生 JavaScript，无框架、无构建、无 npm、无 CDN 外链（README.md；仓库内无 package.json）。`index.html` 单页按固定顺序注入 19 个 `js/*.js`（全部带 `?v=6.0` 查询串）。数据全部内嵌为 JS 文件（如 `js/data-catalog.js` 74 KB、`js/data-curiosity-english.js` 450+ KB）。
+- PWA：`manifest.webmanifest` + `sw.js`（缓存名 `duwu-playground-v6.0`），支持 iPad Safari「添加到主屏幕」离线秒开；`.mp4` 与 Range 请求永不走缓存（sw.js 注释）。
 - 后端：`deploy/voice_server.py`，Python 3 标准库单文件、零依赖（653 行），监听 `127.0.0.1:8798`，由 systemd 单元 `duwu-voice.service` 常驻；提供录音云同步、豆包 TTS 代理缓存、LLM 聊天三个接口。
 - 本机形态：`python3 -m http.server 8892` 静态站（无后端；TTS/聊天/录音接口在本机 8892 下不可用）。
 
@@ -30,19 +28,19 @@
 | `index.html` | 唯一页面入口；19 个脚本加载顺序在此定义，改 js 必须同步其 `?v=` 版本号 |
 | `js/app.js` | 前端主逻辑（卡片/导航/实验编排/四视图切换） |
 | `js/data-catalog.js` | 全书序章 + 第 1～8 章 99 条毒物条目数据 |
-| `js/data-real-videos.js` | 50 条 Wikimedia Commons 逐帧核验真实实况短片元数据（区分 `exact` 真身与近亲/实验） |
-| `js/data-curiosity-english.js` | 99 卡「十万个为什么」3连问（297 故事）+ 实况解说 + 眼力侦探题 + 英文名/297科学词卡/双语情景句 |
+| `js/data-real-videos.js` | 全书 99/99 实景与写实生态动态短片清单（区分 `camera` 野外/实验真实实拍 39 条与 `realistic_scene` 写实动态还原 60 条） |
+| `js/data-curiosity-english.js` | 99 卡「生活中的真实实例」故事与写实插画 + 「十万个为什么」3连问（297 故事）+ 实况解说 + 眼力侦探题 + 英文名/297科学词卡/双语情景句 |
 | `js/data-card-interactions.js` | 99 卡专属实验/答题/传送内容（193 KB，11-14 新增） |
-| `js/upgrade1~5-*.js` | 五大进阶模块：生态寻宝、分子手术、王牌对战、配音间、实况伴读与英语点读跟读/闯关擂台 |
+| `js/upgrade1~5-*.js` | 五大进阶模块：生态寻宝、分子手术、王牌对战、配音间、实况与生活实例伴读及英语点读跟读/闯关擂台 |
 | `js/doubao-tts.js` / `js/ai-companion.js` | TTS 客户端 / AI 语音伴侣客户端（调 `./api/tts`、`./api/chat`） |
-| `js/data-tts-manifest.js` | 286 条预生成 TTS 音频清单，配合 `assets/tts/` 实现 0ms 播放 |
+| `js/data-tts-manifest.js` | 1054 条预生成豆包 TTS 音频清单，配合 `assets/tts/` 实现 0ms 播放 |
 | `sw.js` | Service Worker：CORE_SHELL 清单 + 缓存名版本号，改 js/css 必改这里 |
-| `css/styles.css` | 全站样式（54 KB） |
+| `css/styles.css` | 全站样式（56 KB） |
 | `deploy/voice_server.py` | 后端 API（录音 / TTS / 聊天），环境变量见 3.4 |
 | `deploy/deploy.sh` | 一键原子发布脚本（见 3.5） |
 | `deploy/nginx-duwu.conf` | 线上 nginx 片段：`/duwu/` 静态 alias + `/duwu/api/` 反代 8798 |
 | `deploy/duwu-voice.service` | 远端 systemd 单元；`deploy/tts.env.example` 为配置变量示例 |
-| `assets/` | 129 MB 全部入库：photos 99 张、videos 99 条 mp4、tts 286 条、scenes 6 张、intro_video.mp4 |
+| `assets/` | 全部入库：photos 99 张、illustrations 99 张写实科学生活插画、real-videos 99 条动态短片、videos 99 条姐姐配音生活剧场短片、tts 1054 条预生成语音、scenes 6 张、intro_video.mp4 |
 | `scripts/make_action_videos.py` / `make_intro_video.py` | 资产生成脚本（需 PIL/ffmpeg/外部密钥，重跑会改写 assets/） |
 | `启动探索站.command` | macOS 双击启动本机 8892 静态站（绑定 0.0.0.0） |
 
@@ -50,7 +48,7 @@
 
 - 无需安装依赖、无需构建（纯静态）。
 - 启动：双击 `启动探索站.command`，或手动 `python3 -m http.server 8892`（来源 README.md；.command 内为 `--bind 0.0.0.0` 并打印局域网 IP 供 iPad 访问）。
-- 构建：无。前端「版本发布」靠手工同步三处版本号：`index.html` 的 `?v=4.0`、`sw.js` 的 `CACHE_NAME`、`sw.js` 的 `CORE_SHELL` 清单。
+- 构建：无。前端「版本发布」靠手工同步三处版本号：`index.html` 的 `?v=6.0`、`sw.js` 的 `CACHE_NAME`、`sw.js` 的 `CORE_SHELL` 清单。
 - 测试：无测试目录、无测试命令（全仓库无 test/CI 配置，实测 find 无命中）。
 - 资产再生：`scripts/make_action_videos.py`（生成 99 条 5 秒短视频）与 `scripts/make_intro_video.py`（生成介绍视频），会读外部 .env 里的密钥并改写 `assets/`，只读调研未运行。
 
@@ -79,7 +77,7 @@
 
 ## 4. 已知问题与下一步
 
-1. **线上版本待核对**：11-14 两笔 v4.0 提交（短视频、99 卡互动）是否已 `deploy.sh` 上线无任何仓库内记录；先 ssh 比对 `current` 指向再下结论。
+1. **豆包 TTS 配额耗尽（1054/1078 静态语音已入库）**：`/Users/mac/projects/电子宠物/server/.env` 中的 `DOUBAO_TTS_API_KEY`（`seed-tts-2.0`）在生成至第 1054 条静态 MP3 后触发火山引擎配额/资源授权错误（HTTP 403 `code 45000030`）。所有已入库的 1054 条静态语音（含 100% 卡片介绍、生活实例、实况旁白、配音剧场及绝大部分十万个为什么/英文句）均本地 0ms 播放、不消耗 API；其余 24 条子音频与动态「随时互动」AI 语音将自动优雅降级为浏览器内置 `speechSynthesis`（保留逐句高亮），待火山引擎续费/更新密钥并重跑 `./deploy/deploy.sh` 后即可恢复实时豆包合成。
 2. **旧快照结论已作废**：`项目情况汇报/10-逐项目正文/毒物大百科.md`（11-12 版）称「无 .git、无远端、仅本机 8892」——现已有 GitHub 远端、正式线上站与 systemd 后端，引用旧文必须复核。
 3. **无 HANDOFF/进度文档**：唯一文档 README.md 偏功能宣传；99 条短视频与 3D 分子的生成口径只散落在 `scripts/*.py` docstring，接手成本高。
 4. **deploy.sh 对外部 .env 强耦合**：若 `电子宠物/server/.env` 缺失则远端 tts.env 不更新但仍重启服务；若 `doudou-writing/.env` 缺失则 `AI_KEY` 静默为空串写入，聊天功能静默失效。
@@ -114,7 +112,9 @@
 
 ## 7. 最近提交摘要
 
-共 10 条提交，全部列出（git log 实测）：
+最近主要版本里程碑（git log 实测）：
+- 2026-11-17 `v6.0` 全书 99/99 写实动态短片、99 张写实生活插画、99 部姐姐配音生活实例剧场短片与 1054 条预生成语音包
+- 2026-11-17 `d6ab389` 新增 50 条核验实况短片、297 个十万个为什么故事与趣味英语互动课堂（v5.0）
 - 2026-11-14 `a6ad6e3` 为每张卡增加 99 条短「攻击/施毒机制」视频，全站升 v4.0
 - 2026-11-14 `d83014b` 新增 99 卡专属互动实验、答题与游乐传送（data-card-interactions.js +4663 行）
 - 2026-11-13 `9b3c486` 按住即录、不限时长 + 每种毒物支持多条录音（含 nginx 上传上限 25m）

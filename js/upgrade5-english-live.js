@@ -70,6 +70,8 @@
       this.stopAll();
       if (window.DoubaoTTS) window.DoubaoTTS.stop();
       if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+      const actionVid = document.getElementById("modalActionVideo");
+      if (actionVid && !actionVid.paused) actionVid.pause();
 
       const targetWords = (String(targetEn || "").toLowerCase().match(/[a-z]+/g) || []).filter(
         (w) => w.length >= 2
@@ -250,9 +252,15 @@
     if (liveMount) {
       if (realVid || (extra && extra.liveCommentary)) {
         const spotDone = state.wonSpotChallenges.includes(item.id);
+        const isRealisticScene = Boolean(realVid && realVid.kind === "realistic_scene");
         const badgeLabel = realVid
-          ? (realVid.exact ? "🎥 物种真身实况短片" : `🎥 实景近亲/实验实拍`)
+          ? isRealisticScene
+            ? "🎨 写实动态还原"
+            : realVid.exact
+            ? "🎥 物种真身实况短片"
+            : "🎥 实景近亲/实验实拍"
           : "🎙️ 现场观察导览";
+        const tagClass = isRealisticScene ? "realistic_scene" : realVid && realVid.exact ? "exact" : "related";
         const subTitle = realVid && realVid.label ? realVid.label : `${item.name}生态观察`;
 
         liveMount.style.display = "block";
@@ -260,10 +268,11 @@
           <div class="real-video-companion-card">
             <div class="rv-header-row">
               <div class="rv-badge-group">
-                <span class="rv-authentic-tag ${realVid && realVid.exact ? "exact" : "related"}">${esc(badgeLabel)}</span>
+                <span class="rv-authentic-tag ${tagClass}">${esc(badgeLabel)}</span>
                 <span class="rv-sub-label">${ruby(subTitle)}</span>
               </div>
               <div class="rv-action-btns">
+                <button type="button" class="rv-mini-action" id="btnJumpStoryVideo" title="观看写实插画+姐姐全程配音的生活实例短片">🎬 姐姐配音剧场</button>
                 ${
                   extra && extra.liveCommentary
                     ? `<button type="button" class="rv-mini-action" id="btnPlayLiveCommentary">🎙️ 边看边听解说</button>`
@@ -282,6 +291,16 @@
             <div id="rvSpotChallengeBox" style="display:none;margin-top:8px;"></div>
           </div>
         `;
+
+        const btnJumpStory = document.getElementById("btnJumpStoryVideo");
+        if (btnJumpStory && typeof opts.switchToStoryVideo === "function") {
+          btnJumpStory.addEventListener("click", () => {
+            if (window.SFX) window.SFX.pop();
+            stopVoiceStudio();
+            shadowingEngine.stopAll();
+            opts.switchToStoryVideo();
+          });
+        }
 
         const btnLiveComm = document.getElementById("btnPlayLiveCommentary");
         if (btnLiveComm && extra && extra.liveCommentary) {
@@ -304,14 +323,14 @@
             const bubble = sBox.querySelector(".kid-voice-bubble");
             if (bubble) {
               bubble.addEventListener("click", () => {
-                speak(null, {
+                speak(extra.liveCommentary, {
                   toggleIfPlaying: true,
                   scopeEl: bubble,
                   statusMountEl: sBox.querySelector(".tts-toy-status")
                 });
               });
             }
-            speak(null, {
+            speak(extra.liveCommentary, {
               toggleIfPlaying: true,
               scopeEl: bubble || sBox,
               triggerBtn: btnLiveComm,
@@ -408,6 +427,79 @@
       } else {
         liveMount.style.display = "none";
         liveMount.innerHTML = "";
+      }
+    }
+
+    // 1.5 挂载 v6.0「🏠 生活中的真实实例 · 写实插画伴读卡」（让小朋友一听就懂！）
+    const lifeMount = document.getElementById("modalLifeExampleMount");
+    if (lifeMount) {
+      if (extra && extra.lifeStory) {
+        const lifeTitle = extra.lifeTitle || "🏠 生活中的真实小例子";
+        const lifeTag = extra.lifeSceneTag || "生活科学实例";
+        const lifeIcon = extra.lifeIcon || "🏠✨";
+        const illuSrc = extra.illuSrc || "";
+
+        lifeMount.style.display = "block";
+        lifeMount.innerHTML = `
+          <div class="life-example-card">
+            <div class="life-example-header">
+              <div class="life-example-title-wrap">
+                <span class="life-scene-tag">${esc(lifeIcon)} ${esc(lifeTag)}</span>
+                <span class="life-example-title">${ruby(lifeTitle)}</span>
+              </div>
+              <button type="button" class="mini-btn on" id="btnSpeakLifeStory" style="padding:6px 13px;font-size:0.82rem;">
+                🔊 听生活实例
+              </button>
+            </div>
+            ${
+              illuSrc
+                ? `
+              <div class="life-example-illu-wrap" id="lifeIlluTrigger" title="点击观看写实插画+姐姐配音生活剧场视频">
+                <img src="${esc(illuSrc)}" alt="${esc(item.name)}生活实例写实图解" class="life-example-illu-img" loading="lazy" />
+                <span class="life-example-play-badge">🎬 点画看配音生活剧场</span>
+              </div>
+            `
+                : ""
+            }
+            <div class="kid-voice-bubble life-example-story-bubble tts-reading-scope" id="lifeStorySpeechScope" title="点击开始或暂停姐姐讲生活小例子">
+              <div class="tts-toy-status" id="lifeStoryStatusMount"></div>
+              <span class="tts-seg" data-tts-seg="${esc(lifeTitle)}。" style="display:none;"></span>
+              <div class="tts-clauses-body">💡 ${renderClauses(extra.lifeStory)}</div>
+            </div>
+          </div>
+        `;
+
+        const illuTrig = document.getElementById("lifeIlluTrigger");
+        if (illuTrig && typeof opts.switchToStoryVideo === "function") {
+          illuTrig.addEventListener("click", () => {
+            if (window.SFX) window.SFX.pop();
+            stopVoiceStudio();
+            shadowingEngine.stopAll();
+            opts.switchToStoryVideo();
+          });
+        }
+
+        const btnLife = document.getElementById("btnSpeakLifeStory");
+        const lifeScope = document.getElementById("lifeStorySpeechScope");
+        const fullLifeSpoken = `${lifeTitle}。${extra.lifeStory}`;
+        const triggerLifeSpeak = () => {
+          stopVoiceStudio();
+          shadowingEngine.stopAll();
+          const vEl = document.getElementById("modalActionVideo");
+          if (vEl && !vEl.paused) vEl.pause();
+          speak(fullLifeSpoken, {
+            toggleIfPlaying: true,
+            scopeEl: lifeScope,
+            triggerBtn: btnLife,
+            statusMountEl: document.getElementById("lifeStoryStatusMount"),
+            defaultBtnHTML: "🔊 听生活实例"
+          });
+        };
+        if (btnLife) btnLife.addEventListener("click", triggerLifeSpeak);
+        if (lifeScope) lifeScope.addEventListener("click", triggerLifeSpeak);
+      } else {
+        lifeMount.style.display = "none";
+        lifeMount.innerHTML = "";
       }
     }
 
@@ -546,16 +638,17 @@
         </div>
       `;
       const bubble = ansStage.querySelector(".kid-voice-bubble");
+      const curSpoken = `${c.q}${c.a}`;
       if (bubble) {
         bubble.addEventListener("click", () => {
-          speak(null, {
+          speak(curSpoken, {
             toggleIfPlaying: true,
             scopeEl: bubble,
             statusMountEl: ansStage.querySelector(".tts-toy-status")
           });
         });
       }
-      speak(null, {
+      speak(curSpoken, {
         scopeEl: bubble || ansStage,
         statusMountEl: ansStage.querySelector(".tts-toy-status"),
         playTapSfx: false
@@ -949,7 +1042,7 @@
           <div class="live-en-top-bar">
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
               <button type="button" class="scene-pill ${this.mode === "live_guess" ? "active" : ""}" data-lemode="live_guess">
-                🎥 模式A：看真实短片 · 猜猜我是谁
+                🎥 模式A：看动态短片 · 猜猜我是谁
               </button>
               <button type="button" class="scene-pill ${this.mode === "en_listen" ? "active" : ""}" data-lemode="en_listen">
                 🇬🇧 模式B：听英语口令 · 闪电认毒物
@@ -966,7 +1059,7 @@
                   ? `
                 <div class="live-en-video-frame">
                   <video src="${esc(rv.src)}" autoplay loop muted playsinline controls class="live-en-video"></video>
-                  <span class="live-en-corner-tag">🎥 野外真实实况 · 猜猜镜头里是谁？</span>
+                  <span class="live-en-corner-tag">${rv.kind === "realistic_scene" ? "🎨 写实动态短片 · 猜猜镜头里是谁？" : "🎥 野外真实实拍 · 猜猜镜头里是谁？"}</span>
                 </div>
                 <div class="live-en-clue-bar">
                   <button type="button" class="mini-btn on" id="btnArenaVoiceHint">🎙️ 听动作提示</button>
