@@ -1921,9 +1921,15 @@
     const ceMap = window.CURIOSITY_ENGLISH_DATA || {};
     const pool = window.CATALOG_DATA.filter((x) => x.chapter !== "ch0" && getPhoto(x.id) && (state.pkMode !== "en" || (ceMap[x.id] && ceMap[x.id].enName)));
     const ans = pool[Math.floor(Math.random() * pool.length)];
-    const others = pool.filter((x) => x.id !== ans.id).sort(() => Math.random() - 0.5).slice(0, 3);
+    let others = [];
+    if (window.EnglishDistractorEngine && window.EnglishDistractorEngine.pickConfusableSpecies) {
+      others = window.EnglishDistractorEngine.pickConfusableSpecies(ans, pool, 3);
+    } else {
+      others = pool.filter((x) => x.id !== ans.id).sort(() => Math.random() - 0.5).slice(0, 3);
+    }
     state.pkAnswer = ans;
     state.pkChoices = [ans, ...others].sort(() => Math.random() - 0.5);
+    state.pkShowZhHint = false;
     renderFlashcardPK();
   }
 
@@ -1933,6 +1939,7 @@
     const ansCe = ceMap[ans.id] || {};
     const isEnPK = state.pkMode === "en";
     const arena = document.getElementById("flashcardArena");
+    const chapterOnly = (ans.code || "").split(" · ")[0] || ans.code;
     arena.innerHTML = `
       <div>
         <div class="mystery-photo-frame">
@@ -1941,30 +1948,38 @@
             🔥 连对纪录：${state.pkStreak}
           </div>
           <div style="position:absolute;bottom:12px;left:12px;background:rgba(15,23,42,0.85);color:#fff;padding:6px 14px;border-radius:99px;font-weight:800;font-size:0.88rem;">
-            ${isEnPK ? `提示：中文叫【${ans.name}】 · ${ans.code}` : `提示：它在原书【${ans.code}】！`}
+            ${isEnPK ? (state.pkShowZhHint ? `提示：中文叫【${ans.name}】 · ${chapterOnly}` : `提示：来自原书【${chapterOnly}】同家族易混选项！`) : `提示：它在原书【${ans.code}】！`}
           </div>
         </div>
       </div>
 
       <div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-          <button type="button" class="scene-pill ${!isEnPK ? "active" : ""}" data-pkmode="zh">📖 模式A：抢答中文与目录</button>
-          <button type="button" class="scene-pill ${isEnPK ? "active" : ""}" data-pkmode="en">🇬🇧 模式B：看图抢英文真名</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button type="button" class="scene-pill ${!isEnPK ? "active" : ""}" data-pkmode="zh">📖 模式A：抢答中文与目录</button>
+            <button type="button" class="scene-pill ${isEnPK ? "active" : ""}" data-pkmode="en">🇬🇧 模式B：看图抢英文真名</button>
+          </div>
+          ${
+            isEnPK && !state.pkShowZhHint
+              ? `<button type="button" class="mini-btn" id="btnPkHintZh" style="padding:4px 10px;min-height:30px;font-size:0.78rem;">💡 偷看中文名</button>`
+              : ""
+          }
         </div>
         <h3 style="margin:0 0 14px;font-size:1.3rem;">
-          ${isEnPK ? "🇬🇧 看高清真身：它的英文名字是哪一个？" : "📸 看真身认毒物：照片里是谁？"}
+          ${isEnPK ? "🇬🇧 看高清真身：辨别同家族英文真名！" : "📸 看真身认毒物：照片里是谁？"}
         </h3>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          ${state.pkChoices.map((c) => {
+          ${state.pkChoices.map((c, cIdx) => {
             const cCe = ceMap[c.id] || {};
             return `
             <button class="venom-bottle pk-choice-btn" data-id="${c.id}" style="padding:16px 12px;font-size:1.05rem;">
-              <div style="font-size:1.65rem;margin-bottom:4px;">${c.emoji}</div>
               ${
                 isEnPK
-                  ? `<div style="font-weight:900;color:var(--c-teal-text);">${cCe.enName || c.name}</div>
-                     <div style="font-size:0.75rem;color:var(--text-muted);margin-top:3px;">${cCe.enPron || c.code}</div>`
-                  : `<div>${ruby(c.name)}</div>
+                  ? `<div class="pk-letter-pill">${["A", "B", "C", "D"][cIdx] || "•"}</div>
+                     <div style="font-weight:900;color:var(--c-teal-text);">${cCe.enName || c.name}</div>
+                     <div style="font-size:0.75rem;color:var(--text-muted);margin-top:3px;">${cCe.enPron || ""}</div>`
+                  : `<div style="font-size:1.65rem;margin-bottom:4px;">${c.emoji}</div>
+                     <div>${ruby(c.name)}</div>
                      <div style="font-size:0.76rem;color:var(--text-muted);margin-top:4px;">${c.code}</div>`
               }
             </button>
@@ -1976,6 +1991,15 @@
     `;
 
     let pkAnswered = false;
+
+    const btnPkHintZh = document.getElementById("btnPkHintZh");
+    if (btnPkHintZh) {
+      btnPkHintZh.addEventListener("click", () => {
+        window.SFX.pop();
+        state.pkShowZhHint = true;
+        renderFlashcardPK();
+      });
+    }
 
     arena.querySelectorAll("[data-pkmode]").forEach((mb) => {
       mb.addEventListener("click", () => {

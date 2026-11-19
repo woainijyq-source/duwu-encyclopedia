@@ -825,13 +825,18 @@
       let slots = [];
       let solvedCur = false;
       let wrongSet = new Set();
+      let spellDecoyOn = true;
 
       const setupWord = (idx) => {
         curSpellIdx = idx;
         const v = vocabList[idx];
         const letters = String(v.w || "").toLowerCase().replace(/[^a-z]/g, "").split("");
-        const shuf = letters.slice().sort(() => Math.random() - 0.5);
-        if (letters.length >= 3 && shuf.join("") === letters.join("")) shuf.reverse();
+        let poolChars = letters.slice();
+        if (spellDecoyOn && window.EnglishDistractorEngine && window.EnglishDistractorEngine.pickConfusableLetters) {
+          poolChars = poolChars.concat(window.EnglishDistractorEngine.pickConfusableLetters(letters.join(""), 3, true));
+        }
+        const shuf = poolChars.slice().sort(() => Math.random() - 0.5);
+        if (letters.length >= 3 && shuf.slice(0, letters.length).join("") === letters.join("")) shuf.reverse();
         tiles = shuf.map((ch, i) => ({ id: i, ch, used: false }));
         slots = letters.map(() => null);
         solvedCur = false;
@@ -857,8 +862,13 @@
               .join("")}
           </div>
           <div class="card-spell-prompt">
-            <span>${v.icon || "🔤"} 拼出「<strong>${esc(v.zh)}</strong>」（${target.length} 个字母）</span>
-            <button type="button" class="mini-btn on" id="btnCardSpellHear" style="padding:4px 10px;min-height:30px;font-size:0.78rem;">🔊 听读音</button>
+            <span>${v.icon || "🔤"} 拼出「<strong>${esc(v.zh)}</strong>」（${target.length} 字母${spellDecoyOn ? " · 含3干扰" : ""}）</span>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button type="button" class="mini-btn ${spellDecoyOn ? "on" : ""}" id="btnCardSpellDecoy" style="padding:4px 9px;min-height:30px;font-size:0.76rem;">
+                ${spellDecoyOn ? "🔥 +3干扰" : "🌱 无干扰"}
+              </button>
+              <button type="button" class="mini-btn on" id="btnCardSpellHear" style="padding:4px 10px;min-height:30px;font-size:0.78rem;">🔊 听读音</button>
+            </div>
           </div>
           <div class="wb-slots-row compact ${solvedCur ? "solved" : ""} ${hasWrong ? "shake-row" : ""}">
             ${slots
@@ -914,6 +924,16 @@
             renderCardSpell();
           });
         });
+
+        const bDecoy = document.getElementById("btnCardSpellDecoy");
+        if (bDecoy) {
+          bDecoy.addEventListener("click", () => {
+            if (window.SFX) window.SFX.pop();
+            spellDecoyOn = !spellDecoyOn;
+            setupWord(curSpellIdx);
+            renderCardSpell();
+          });
+        }
 
         const bHear = document.getElementById("btnCardSpellHear");
         if (bHear) {
@@ -1279,6 +1299,8 @@
       this.choices = [];
       this.answered = false;
       this.clozeData = null;
+      this.clozeShowZh = false;
+      this.enBlindListen = false;
     }
 
     init() {
@@ -1341,22 +1363,38 @@
         const pool = this._getClozePool();
         if (pool.length < 4) return;
         const pick = pool[Math.floor(Math.random() * pool.length)];
-        const seenW = new Set([pick.vocab.w.toLowerCase()]);
-        const distractors = [];
-        const shuffled = pool.slice().sort(() => Math.random() - 0.5);
-        for (const c of shuffled) {
-          const low = c.vocab.w.toLowerCase();
-          if (!seenW.has(low)) {
-            seenW.add(low);
-            distractors.push(c.vocab);
-            if (distractors.length >= 3) break;
+        let distractors = [];
+        if (window.EnglishDistractorEngine && window.EnglishDistractorEngine.pickConfusableVocab) {
+          const allVocabObjs = pool.map((p) => ({
+            ...p.vocab,
+            key: String(p.vocab.w || "").toLowerCase(),
+            chapter: p.item.chapter
+          }));
+          const targetObj = {
+            ...pick.vocab,
+            key: String(pick.vocab.w || "").toLowerCase(),
+            chapter: pick.item.chapter
+          };
+          distractors = window.EnglishDistractorEngine.pickConfusableVocab(targetObj, allVocabObjs, 3);
+        }
+        if (distractors.length < 3) {
+          const seenW = new Set([pick.vocab.w.toLowerCase(), ...distractors.map((d) => d.w.toLowerCase())]);
+          const shuffled = pool.slice().sort(() => Math.random() - 0.5);
+          for (const c of shuffled) {
+            const low = c.vocab.w.toLowerCase();
+            if (!seenW.has(low)) {
+              seenW.add(low);
+              distractors.push(c.vocab);
+              if (distractors.length >= 3) break;
+            }
           }
         }
         this.currentAnswer = pick.item;
+        this.clozeShowZh = false;
         this.clozeData = {
           vocab: pick.vocab,
           re: pick.re,
-          options: [pick.vocab, ...distractors].sort(() => Math.random() - 0.5)
+          options: [pick.vocab, ...distractors.slice(0, 3)].sort(() => Math.random() - 0.5)
         };
         this.answered = false;
         this.render();
@@ -1376,10 +1414,15 @@
 
       if (!pool.length) return;
       const ans = pool[Math.floor(Math.random() * pool.length)];
-      const distractors = pool
-        .filter((x) => x.id !== ans.id)
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 3);
+      let distractors = [];
+      if (window.EnglishDistractorEngine && window.EnglishDistractorEngine.pickConfusableSpecies) {
+        distractors = window.EnglishDistractorEngine.pickConfusableSpecies(ans, pool, 3);
+      } else {
+        distractors = pool
+          .filter((x) => x.id !== ans.id)
+          .sort(() => Math.random() - 0.5)
+          .slice(0, 3);
+      }
 
       this.currentAnswer = ans;
       this.choices = [ans, ...distractors].sort(() => Math.random() - 0.5);
@@ -1485,16 +1528,25 @@
                   : `
                 <div class="live-en-audio-box">
                   <div style="font-size:3rem;margin-bottom:6px;">🇬🇧🎧</div>
-                  <div style="font-size:0.9rem;color:var(--c-teal);font-weight:900;margin-bottom:6px;">仔细听英文名字与线索，找出对应的生物！</div>
-                  <div class="live-en-big-word">${esc(ce.enName || "Mystery Creature")}</div>
-                  ${ce.enPron ? `<div style="color:var(--text-muted);font-size:0.86rem;margin-bottom:8px;">${esc(ce.enPron)}</div>` : ""}
-                  <div class="live-en-sentence">${highlightWords(clueEn, clueKw)}</div>
+                  <div style="font-size:0.9rem;color:var(--c-teal-text);font-weight:900;margin-bottom:6px;">
+                    ${this.enBlindListen && !this.answered ? "🎧 纯听盲猜模式：只靠耳朵听懂英文线索！" : "仔细听英文名字与线索，在右边同家族易混选项中找出主角！"}
+                  </div>
+                  ${
+                    this.enBlindListen && !this.answered
+                      ? `<div class="live-en-big-word" style="letter-spacing:0.12em;">🎧 • • • ? • • •</div>`
+                      : `<div class="live-en-big-word">${esc(ce.enName || "Mystery Creature")}</div>
+                         ${ce.enPron ? `<div style="color:var(--text-muted);font-size:0.86rem;margin-bottom:8px;">${esc(ce.enPron)}</div>` : ""}
+                         <div class="live-en-sentence">${highlightWords(clueEn, clueKw)}</div>`
+                  }
                   <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px;">
                     <button type="button" class="big-action-btn" id="btnReplayEnClue" style="padding:9px 18px;min-height:40px;font-size:0.9rem;">
                       🔊 再听一遍口令
                     </button>
                     <button type="button" class="mini-btn on" id="btnReplayEnSlow">
                       🐢 慢速清晰听
+                    </button>
+                    <button type="button" class="mini-btn ${this.enBlindListen ? "on" : ""}" id="btnToggleBlindListen">
+                      ${this.enBlindListen ? "👁️ 显示英文文字" : "🎧 纯听挑战"}
                     </button>
                   </div>
                 </div>
@@ -1504,26 +1556,35 @@
 
             <!-- 右侧四选一选项 -->
             <div>
-              <h3 style="margin:0 0 12px;font-size:1.22rem;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                <h3 style="margin:0;font-size:1.18rem;">
+                  ${
+                    this.mode === "live_guess"
+                      ? "🕵️‍♀️ 镜头里的真实主角是哪一位？"
+                      : isCloze
+                      ? "🧩 听读音 + 辨形近词：横线里缺的是哪个英文词？"
+                      : "🇬🇧 这句英语说的是下面哪一位？"
+                  }
+                </h3>
                 ${
-                  this.mode === "live_guess"
-                    ? "🕵️‍♀️ 镜头里的真实主角是哪一位？"
-                    : isCloze
-                    ? `🧩 选出横线里缺少的英文科学单词（意思：${esc(this.clozeData.vocab.icon || "")} ${esc(this.clozeData.vocab.zh)}）`
-                    : "🇬🇧 这句英语说的是大百科里的谁？"
+                  isCloze && !this.answered
+                    ? this.clozeShowZh
+                      ? `<span class="mini-btn on" style="pointer-events:none;">💡 词义：${esc(this.clozeData.vocab.zh)}</span>`
+                      : `<button type="button" class="mini-btn" id="btnClozeHintZh" style="padding:4px 10px;min-height:30px;font-size:0.78rem;">💡 偷看词义提示</button>`
+                    : ""
                 }
-              </h3>
+              </div>
               <div class="live-en-choices-grid">
                 ${
                   isCloze
                     ? this.clozeData.options
                         .map(
-                          (vo) => `
+                          (vo, oIdx) => `
                         <button type="button" class="live-en-choice-card cloze-opt-card" data-cword="${esc(vo.w.toLowerCase())}">
-                          <div class="lec-thumb lec-emoji">${vo.icon || "🔤"}</div>
+                          <div class="lec-thumb lec-letter-badge">${["A", "B", "C", "D"][oIdx] || "•"}</div>
                           <div class="lec-meta">
                             <div class="lec-name cloze-opt-word">${esc(vo.w)}</div>
-                            <div class="lec-sub">${esc(vo.zh)}</div>
+                            <div class="lec-sub cloze-opt-reveal">${this.answered ? `${vo.icon || ""} ${esc(vo.zh)}` : "🎧 辨音选词"}</div>
                           </div>
                         </button>
                       `
@@ -1593,9 +1654,26 @@
       if (btnReplay) btnReplay.addEventListener("click", () => this._playEnglishPrompt(false));
       const btnReplaySlow = document.getElementById("btnReplayEnSlow");
       if (btnReplaySlow) btnReplaySlow.addEventListener("click", () => this._playEnglishPrompt(true));
+      const btnBlind = document.getElementById("btnToggleBlindListen");
+      if (btnBlind) {
+        btnBlind.addEventListener("click", () => {
+          if (window.SFX) window.SFX.pop();
+          this.enBlindListen = !this.enBlindListen;
+          this.render();
+        });
+      }
+      const btnClozeHint = document.getElementById("btnClozeHintZh");
+      if (btnClozeHint) {
+        btnClozeHint.addEventListener("click", () => {
+          if (window.SFX) window.SFX.pop();
+          this.clozeShowZh = true;
+          this.render();
+        });
+      }
 
       if (isCloze) {
         const rightW = this.clozeData.vocab.w.toLowerCase();
+        const optMap = new Map(this.clozeData.options.map((o) => [o.w.toLowerCase(), o]));
         this.mountEl.querySelectorAll(".cloze-opt-card").forEach((optBtn) => {
           optBtn.addEventListener("click", () => {
             const picked = optBtn.getAttribute("data-cword");
@@ -1603,6 +1681,12 @@
             if (!fb) return;
             if (picked === rightW) {
               optBtn.classList.add("picked-right");
+              // 答对后把 4 个形近词的真实中文意思全部揭示出来，顺带一网打尽！
+              this.mountEl.querySelectorAll(".cloze-opt-card").forEach((btn) => {
+                const wObj = optMap.get(btn.getAttribute("data-cword"));
+                const sub = btn.querySelector(".cloze-opt-reveal");
+                if (wObj && sub) sub.textContent = `${wObj.icon || ""} ${wObj.zh}`;
+              });
               if (!this.answered) {
                 this.answered = true;
                 this.streak += 1;
@@ -1617,7 +1701,7 @@
               fb.innerHTML = `
                 <div class="arena-win-card">
                   <div style="font-weight:900;font-size:1rem;color:var(--c-ok-text);">
-                    🎉 填词成功 (+2⭐)！<strong>${esc(this.clozeData.vocab.w)}</strong> = ${esc(this.clozeData.vocab.zh)}！
+                    🎉 填词成功 (+2⭐)！<strong>${esc(this.clozeData.vocab.w)}</strong> = ${this.clozeData.vocab.icon || ""} ${esc(this.clozeData.vocab.zh)}！
                   </div>
                   <div class="cloze-win-ex">
                     ${esc(this.clozeData.vocab.ex)}
@@ -1636,6 +1720,11 @@
               const bNext = document.getElementById("btnArenaNext");
               if (bNext) bNext.addEventListener("click", () => this.nextRound());
             } else {
+              const wrongObj = optMap.get(picked);
+              if (wrongObj) {
+                const sub = optBtn.querySelector(".cloze-opt-reveal");
+                if (sub) sub.textContent = `${wrongObj.icon || ""} ${wrongObj.zh}`;
+              }
               optBtn.classList.remove("picked-wrong");
               void optBtn.offsetWidth;
               optBtn.classList.add("picked-wrong");
@@ -1643,7 +1732,7 @@
               const streakEl = this.mountEl.querySelector(".live-en-streak-pill");
               if (streakEl) streakEl.textContent = `🔥 连胜：0 题`;
               if (window.SFX) window.SFX.bonk();
-              fb.innerHTML = `<div style="color:var(--c-warn-text);font-weight:800;padding:6px;">💡 点左边【🐢 慢速细听】听听横线里念的是哪个英文词吧！</div>`;
+              fb.innerHTML = `<div style="color:var(--c-warn-text);font-weight:800;padding:6px;">💡 ${wrongObj ? `<strong>${esc(wrongObj.w)}</strong> 是「${esc(wrongObj.zh)}」哦！` : ""}再点左边【🐢 慢速细听】分辨形近词！</div>`;
             }
           });
         });

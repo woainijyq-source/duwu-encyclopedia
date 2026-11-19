@@ -204,6 +204,228 @@
     return matched;
   }
 
+  // ============================================================================
+  // 高难混淆干扰项引擎 (Smart Orthographic / Phonetic / Semantic Distractor Engine)
+  // 让每个英语单词游戏的选项都“长相像、读音近、同主题”，杜绝靠首字母/Emoji蒙对！
+  // ============================================================================
+  function levenshtein(a, b) {
+    const sa = String(a || "").toLowerCase();
+    const sb = String(b || "").toLowerCase();
+    const m = sa.length;
+    const n = sb.length;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        dp[i][j] =
+          sa[i - 1] === sb[j - 1]
+            ? dp[i - 1][j - 1]
+            : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+      }
+    }
+    return dp[m][n];
+  }
+
+  function vocabConfusionScore(a, b) {
+    const wa = String(a.key || a.w || "").toLowerCase();
+    const wb = String(b.key || b.w || "").toLowerCase();
+    if (!wa || !wb || wa === wb) return -1;
+    let sc = 0;
+    if (wa[0] === wb[0]) sc += 36;
+    if (wa.slice(0, 2) === wb.slice(0, 2)) sc += 32;
+    if (wa.length >= 3 && wb.length >= 3 && wa.slice(0, 3) === wb.slice(0, 3)) sc += 24;
+    if (wa.slice(-2) === wb.slice(-2)) sc += 22;
+    else if (wa.slice(-1) === wb.slice(-1)) sc += 10;
+    const lenDiff = Math.abs(wa.length - wb.length);
+    sc += Math.max(0, 16 - lenDiff * 5);
+    const dist = levenshtein(wa, wb);
+    const maxLen = Math.max(wa.length, wb.length);
+    sc += Math.round((1 - dist / Math.max(1, maxLen)) * 48);
+    if (a.chapter && b.chapter && a.chapter === b.chapter) sc += 8;
+    return sc;
+  }
+
+  function pickConfusableVocab(target, fullPool, count) {
+    const tKey = String((target && (target.key || target.w)) || "").toLowerCase();
+    const seen = new Set([tKey]);
+    const scored = [];
+    for (const item of fullPool || []) {
+      const k = String((item && (item.key || item.w)) || "").toLowerCase();
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      scored.push({ item, score: vocabConfusionScore(target, item) });
+    }
+    scored.sort((x, y) => y.score - x.score);
+    // 前 2 个必定锁定最强形近/音近词，其余从前 (count + 5) 最像窗口里随机抽取兼顾新鲜感
+    const locked = scored.slice(0, Math.min(2, count)).map((x) => x.item);
+    const restNeed = Math.max(0, count - locked.length);
+    const windowPool = scored.slice(locked.length, locked.length + Math.max(restNeed + 5, 8)).map((x) => x.item);
+    return locked.concat(shuffle(windowPool).slice(0, restNeed));
+  }
+
+  const PHONICS_CONFUSERS = {
+    a: "eou", e: "iay", i: "eyl", o: "au", u: "ao",
+    b: "pdv", c: "ksz", d: "tb", f: "vp", g: "jkc",
+    h: "nk", j: "gy", k: "cg", l: "ri", m: "nw",
+    n: "mr", p: "bd", q: "kc", r: "ln", s: "czx",
+    t: "df", v: "fw", w: "vm", x: "sz", y: "ie", z: "sc"
+  };
+
+  function pickConfusableLetters(word, count, includeDoubleTraps) {
+    const letters = String(word || "").toLowerCase().replace(/[^a-z]/g, "").split("");
+    const inWord = new Set(letters);
+    const primary = [];
+    const seenPri = new Set();
+    for (const ch of shuffle(letters)) {
+      const conf = PHONICS_CONFUSERS[ch] || "";
+      for (const alt of conf.split("")) {
+        if (!inWord.has(alt) && !seenPri.has(alt)) {
+          seenPri.add(alt);
+          primary.push(alt);
+        }
+      }
+    }
+    const picked = shuffle(primary).slice(0, count);
+    // 魔鬼/进阶模式故意混入 1~2 个单词里已有字母的双写陷阱（如 venom 多一个 n 或 e）
+    if (includeDoubleTraps && letters.length >= 4) {
+      const trapCandidates = shuffle(letters.filter((c) => "aeiounrstlcmp".includes(c)));
+      const trapCount = count >= 5 ? 2 : 1;
+      for (let i = 0; i < trapCount && trapCandidates[i]; i++) {
+        if (picked.length >= count) {
+          picked[picked.length - 1 - i] = trapCandidates[i];
+        } else {
+          picked.push(trapCandidates[i]);
+        }
+      }
+    }
+    const fallback = shuffle("aeiourstlncpmbdgfhvwyk".split("").filter((c) => !inWord.has(c)));
+    for (const f of fallback) {
+      if (picked.length >= count) break;
+      if (!picked.includes(f)) picked.push(f);
+    }
+    return picked.slice(0, count);
+  }
+
+  const SENTENCE_DECOY_PAIRS = {
+    is: ["are", "was"],
+    are: ["is", "were"],
+    was: ["were", "is"],
+    can: ["cannot", "will", "does"],
+    cannot: ["can", "never", "will"],
+    do: ["does", "did"],
+    does: ["do", "is"],
+    has: ["have", "had"],
+    have: ["has", "had"],
+    in: ["on", "at", "under"],
+    on: ["in", "at", "from"],
+    from: ["into", "with", "under"],
+    with: ["without", "from", "into"],
+    its: ["their", "our", "my"],
+    it: ["they", "she", "we"],
+    they: ["it", "we", "he"],
+    a: ["the", "an", "this"],
+    the: ["a", "this", "some"],
+    poison: ["venom", "medicine", "sugar"],
+    venom: ["poison", "water", "honey"],
+    toxic: ["sweet", "safe", "soft"],
+    bright: ["dark", "pale", "tiny"],
+    tiny: ["huge", "heavy", "tall"],
+    eat: ["bite", "touch", "smell"],
+    bite: ["eat", "touch", "wash"],
+    sting: ["bite", "eat", "hide"],
+    never: ["always", "often", "only"],
+    very: ["too", "almost", "never"],
+    deadly: ["safe", "mild", "sweet"],
+    skin: ["shell", "bone", "fur"],
+    water: ["fire", "smoke", "oil"],
+    heat: ["cold", "ice", "wind"]
+  };
+
+  function pickSentenceDecoyWords(tokens, count) {
+    const existing = new Set(
+      (tokens || []).map((t) => String(t).toLowerCase().replace(/[^a-z']/g, ""))
+    );
+    const candidates = [];
+    const seen = new Set();
+    for (const tok of tokens || []) {
+      const clean = String(tok).toLowerCase().replace(/[^a-z']/g, "");
+      const alts = SENTENCE_DECOY_PAIRS[clean];
+      if (!alts) continue;
+      for (const alt of alts) {
+        if (!existing.has(alt) && !seen.has(alt)) {
+          seen.add(alt);
+          candidates.push(alt);
+        }
+      }
+    }
+    const general = shuffle(["never", "very", "always", "venom", "poison", "under", "without", "only", "still", "into", "their", "does", "were", "might"]);
+    for (const g of general) {
+      if (!existing.has(g) && !seen.has(g)) {
+        seen.add(g);
+        candidates.push(g);
+      }
+    }
+    return shuffle(candidates.slice(0, Math.max(count + 4, 6))).slice(0, count);
+  }
+
+  function pickConfusableSpecies(target, pool, count) {
+    const ceMap = window.CURIOSITY_ENGLISH_DATA || {};
+    const tCe = ceMap[target.id] || {};
+    const tEn = String(tCe.enName || "").toLowerCase();
+    const stopW = new Set(["the", "of", "and", "in", "a", "an", "sea", "red", "blue", "black", "white", "yellow", "green", "golden", "giant", "little", "common", "japanese"]);
+    const tWords = new Set(
+      tEn.split(/[\s-]+/).filter((w) => w.length >= 3 && !stopW.has(w))
+    );
+
+    const FAMILY_GROUPS = [
+      /[蛇蝮蝰蟒]/,
+      /[蛛蜘]/,
+      /[蜂蚁]/,
+      /[蛾蝶毛虫]/,
+      /[蛙蟾螈]/,
+      /[鱼鲀鲉魟鲨]/,
+      /[菇蕈鹅膏茸伞菌]/,
+      /[水母海葵珊瑚]/,
+      /[螺贝章鱼]/,
+      /[蝎蜈蚣蚰蜒]/,
+      /[薯豆瓜果芋]/
+    ];
+    const tFamily = FAMILY_GROUPS.findIndex((re) => re.test(target.name || ""));
+
+    const scored = (pool || [])
+      .filter((x) => x.id !== target.id)
+      .map((cand) => {
+        const cCe = ceMap[cand.id] || {};
+        const cEn = String(cCe.enName || "").toLowerCase();
+        const cWords = cEn.split(/[\s-]+/).filter((w) => w.length >= 3);
+        let sc = 0;
+        if (cand.chapter === target.chapter) sc += 45;
+        if (tFamily >= 0 && FAMILY_GROUPS[tFamily].test(cand.name || "")) sc += 52;
+        if (cWords.some((w) => tWords.has(w))) sc += 56;
+        if (tEn && cEn && tEn[0] === cEn[0]) sc += 20;
+        if (cand.strategy === target.strategy) sc += 12;
+        if (cand.mech === target.mech) sc += 10;
+        sc += Math.max(0, 12 - Math.abs(tEn.length - cEn.length));
+        return { item: cand, score: sc };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    const locked = scored.slice(0, Math.min(2, count)).map((x) => x.item);
+    const restNeed = Math.max(0, count - locked.length);
+    const win = scored.slice(locked.length, locked.length + Math.max(restNeed + 5, 7)).map((x) => x.item);
+    return locked.concat(shuffle(win).slice(0, restNeed));
+  }
+
+  window.EnglishDistractorEngine = {
+    levenshtein,
+    vocabConfusionScore,
+    pickConfusableVocab,
+    pickConfusableLetters,
+    pickSentenceDecoyWords,
+    pickConfusableSpecies
+  };
+
   class EnglishPlayground {
     constructor(mountEl, app) {
       this.mountEl = mountEl;
@@ -215,8 +437,9 @@
       this.allVocab = buildMasterVocabList();
       this.allSentences = buildSentencePool();
 
-      // Word Builder state
-      this.wbHard = false;
+      // Word Builder state: 'easy' (0干扰) | 'normal' (+3音近形近干扰,默认) | 'devil' (+5强干扰+隐例句)
+      this.wbDiff = "normal";
+      this.wbShowExHint = false;
       this.wbStreak = 0;
       this.wbWord = null;
       this.wbTiles = []; // [{ id, ch, used }]
@@ -226,6 +449,7 @@
 
       // Memory Match state
       this.memMode = "species"; // 'species' | 'vocab'
+      this.memConfuse = true; // 🔥 形近/同类易混模式（默认开启！）
       this.memPairsTarget = 6;
       this.memCards = [];
       this.memFlipped = [];
@@ -236,9 +460,11 @@
       this.memWon = false;
 
       // Sentence Train state
+      this.trDecoyOn = true; // 🔥 默认混入 +2 节干扰词车厢
+      this.trDecoyCount = 0;
       this.trStreak = 0;
       this.trSent = null;
-      this.trPool = []; // [{ id, word, used }]
+      this.trPool = []; // [{ id, word, used, isDecoy }]
       this.trTrack = []; // [{ id, word }]
       this.trSolved = false;
       this.trWrongIdx = -1;
@@ -249,10 +475,12 @@
 
       // Bubble Pop Arcade state (Game 4)
       this.bpMode = "listen"; // 'listen' | 'meaning'
+      this.bpCount = 6; // 6泡泡 | 8泡泡(魔鬼挑战)
       this.bpStreak = 0;
       this.bpTarget = null;
-      this.bpBubbles = []; // [{ id, vocab, popped, wrong, hue, delay, dur }]
+      this.bpBubbles = []; // [{ id, vocab, popped, wrong, bg, border, delay, dur }]
       this.bpSolved = false;
+      this.bpShowHint = false;
       this.bpFeedback = "";
       this._bpNextTimer = null;
 
@@ -469,13 +697,14 @@
     loadBuilderWord(vocabItem) {
       this.wbWord = vocabItem;
       this.wbSolved = false;
+      this.wbShowExHint = false;
       this.wbWrongIndices = new Set();
       const letters = vocabItem.key.split("");
       let tileChars = letters.slice();
-      if (this.wbHard) {
-        const extras = "aeiourstlncpmbdg".split("").filter((ch) => !letters.includes(ch));
-        const pickExtras = shuffle(extras).slice(0, 2);
-        tileChars = tileChars.concat(pickExtras);
+      if (this.wbDiff === "normal") {
+        tileChars = tileChars.concat(pickConfusableLetters(vocabItem.key, 3, true));
+      } else if (this.wbDiff === "devil") {
+        tileChars = tileChars.concat(pickConfusableLetters(vocabItem.key, 5, true));
       }
       let shuffled = shuffle(tileChars);
       // 尽量避免恰好原顺序排列
@@ -593,8 +822,9 @@
         <div class="wb-arena-card">
           <div class="wb-header-row">
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-              <button type="button" class="scene-pill ${!this.wbHard ? "active" : ""}" id="btnWbEasy">🌟 轻松拼词</button>
-              <button type="button" class="scene-pill ${this.wbHard ? "active" : ""}" id="btnWbHard">🔥 干扰字母挑战</button>
+              <button type="button" class="scene-pill ${this.wbDiff === "easy" ? "active" : ""}" data-wbdiff="easy">🌱 无干扰入门</button>
+              <button type="button" class="scene-pill ${this.wbDiff === "normal" ? "active" : ""}" data-wbdiff="normal">⚡ 音近干扰 (+3字母)</button>
+              <button type="button" class="scene-pill ${this.wbDiff === "devil" ? "active" : ""}" data-wbdiff="devil">🔥 魔鬼烧脑 (+5干扰)</button>
             </div>
             <div class="live-en-streak-pill">🔥 拼词连胜：${this.wbStreak} 词</div>
           </div>
@@ -614,16 +844,23 @@
                 <span class="wb-meaning-emoji">${v.icon}</span>
                 <div>
                   <div class="wb-meaning-zh">${esc(v.zh)} ${isMastered ? `<span class="wb-mastered-tag">✅ 已收进词典</span>` : ""}</div>
-                  <div class="wb-meaning-hint">共 ${v.key.length} 个字母 · 点右边按钮听发音！</div>
+                  <div class="wb-meaning-hint">
+                    共 ${v.key.length} 个字母${this.wbDiff === "devil" ? " · 含 5 个混淆/双写陷阱！" : this.wbDiff === "normal" ? " · 含 3 个音近干扰字母！" : " · 点右侧积木拼出来！"}
+                  </div>
                 </div>
               </div>
 
               ${
                 v.ex
-                  ? `<div class="wb-example-box">
-                       <div style="font-size:0.74rem;font-weight:900;color:var(--c-warn-text);margin-bottom:4px;">📝 例句线索：</div>
-                       <div class="wb-example-text">${this.wbSolved ? highlightWordInSentence(v.ex, v.key) : blankOutWord(v.ex, v.key)}</div>
-                     </div>`
+                  ? this.wbDiff === "devil" && !this.wbSolved && !this.wbShowExHint
+                    ? `<div class="wb-example-box" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+                         <span style="font-size:0.82rem;font-weight:800;color:var(--text-sub);">🔥 魔鬼模式已隐藏例句，先听读音盲拼吧！</span>
+                         <button type="button" class="mini-btn" id="btnWbRevealEx" style="padding:4px 10px;min-height:30px;font-size:0.78rem;">💡 偷看例句</button>
+                       </div>`
+                    : `<div class="wb-example-box">
+                         <div style="font-size:0.74rem;font-weight:900;color:var(--c-warn-text);margin-bottom:4px;">📝 例句线索：</div>
+                         <div class="wb-example-text">${this.wbSolved ? highlightWordInSentence(v.ex, v.key) : blankOutWord(v.ex, v.key)}</div>
+                       </div>`
                   : ""
               }
 
@@ -716,23 +953,22 @@
       const bOpen = document.getElementById("btnWbOpenCard");
       if (bOpen) bOpen.addEventListener("click", () => this.app.openSuperCard(v.cardId));
 
-      const bEasy = document.getElementById("btnWbEasy");
-      if (bEasy) {
-        bEasy.addEventListener("click", () => {
-          if (!this.wbHard) return;
+      mount.querySelectorAll("[data-wbdiff]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const next = btn.getAttribute("data-wbdiff");
+          if (next === this.wbDiff) return;
           if (window.SFX) window.SFX.pop();
-          this.wbHard = false;
+          this.wbDiff = next;
           this.loadBuilderWord(this.wbWord);
           this.renderSubBody();
         });
-      }
-      const bHard = document.getElementById("btnWbHard");
-      if (bHard) {
-        bHard.addEventListener("click", () => {
-          if (this.wbHard) return;
+      });
+
+      const bRevealEx = document.getElementById("btnWbRevealEx");
+      if (bRevealEx) {
+        bRevealEx.addEventListener("click", () => {
           if (window.SFX) window.SFX.pop();
-          this.wbHard = true;
-          this.loadBuilderWord(this.wbWord);
+          this.wbShowExHint = true;
           this.renderSubBody();
         });
       }
@@ -848,7 +1084,14 @@
             (x) => x.chapter !== "ch0" && ceMap[x.id] && ceMap[x.id].enName && this.app.getPhoto(x.id)
           );
         }
-        const picked = shuffle(pool).slice(0, Math.min(this.memPairsTarget, pool.length));
+        const need = Math.min(this.memPairsTarget, pool.length);
+        let picked = [];
+        if (this.memConfuse && pool.length > need) {
+          const anchor = pool[Math.floor(Math.random() * pool.length)];
+          picked = [anchor, ...pickConfusableSpecies(anchor, pool, need - 1)];
+        } else {
+          picked = shuffle(pool).slice(0, need);
+        }
         picked.forEach((item) => {
           const ce = ceMap[item.id];
           cards.push({
@@ -876,7 +1119,14 @@
       } else {
         let pool = this._getFilteredVocab();
         if (pool.length < 4) pool = this.allVocab;
-        const picked = shuffle(pool).slice(0, Math.min(this.memPairsTarget, pool.length));
+        const need = Math.min(this.memPairsTarget, pool.length);
+        let picked = [];
+        if (this.memConfuse && this.allVocab.length > need) {
+          const anchor = pool[Math.floor(Math.random() * pool.length)];
+          picked = [anchor, ...pickConfusableVocab(anchor, this.allVocab, need - 1)];
+        } else {
+          picked = shuffle(pool).slice(0, need);
+        }
         picked.forEach((v) => {
           cards.push({
             uid: `${v.key}_zh`,
@@ -1003,7 +1253,10 @@
           <div class="wb-header-row">
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
               <button type="button" class="scene-pill ${this.memMode === "species" ? "active" : ""}" data-mmode="species">📸 实拍物种 ↔ 英文名</button>
-              <button type="button" class="scene-pill ${this.memMode === "vocab" ? "active" : ""}" data-mmode="vocab">🔤 科学单词 ↔ 中文图</button>
+              <button type="button" class="scene-pill ${this.memMode === "vocab" ? "active" : ""}" data-mmode="vocab">🔤 科学单词 ↔ 中文</button>
+              <button type="button" class="mini-btn ${this.memConfuse ? "on" : ""}" id="btnMemConfuse" title="同批牌专挑形近词或同章相近物种，考验真功夫！">
+                ${this.memConfuse ? "🔥 形近/同类易混" : "🌱 随机轻松"}
+              </button>
               <button type="button" class="mini-btn ${this.memPairsTarget === 6 ? "on" : ""}" data-msize="6">6对 (12张)</button>
               <button type="button" class="mini-btn ${this.memPairsTarget === 8 ? "on" : ""}" data-msize="8">8对 (16张)</button>
             </div>
@@ -1084,6 +1337,16 @@
         });
       });
 
+      const bConfuse = document.getElementById("btnMemConfuse");
+      if (bConfuse) {
+        bConfuse.addEventListener("click", () => {
+          if (window.SFX) window.SFX.pop();
+          this.memConfuse = !this.memConfuse;
+          this.setupMemoryBoard();
+          this.renderSubBody();
+        });
+      }
+
       const bRestart = document.getElementById("btnMemRestart");
       if (bRestart) {
         bRestart.addEventListener("click", () => {
@@ -1134,8 +1397,20 @@
       this.trSolved = false;
       this.trWrongIdx = -1;
       this.trTrack = [];
-      let shuf = shuffle(sentObj.tokens.map((w, i) => ({ id: i, word: w, used: false })));
-      if (shuf.map((x) => x.word).join(" ") === sentObj.en) {
+      const realCars = sentObj.tokens.map((w, i) => ({ id: i, word: w, used: false, isDecoy: false }));
+      let extraCars = [];
+      if (this.trDecoyOn) {
+        const decoys = pickSentenceDecoyWords(sentObj.tokens, 2);
+        extraCars = decoys.map((dw, j) => ({
+          id: sentObj.tokens.length + j,
+          word: dw,
+          used: false,
+          isDecoy: true
+        }));
+      }
+      this.trDecoyCount = extraCars.length;
+      let shuf = shuffle(realCars.concat(extraCars));
+      if (shuf.slice(0, sentObj.tokens.length).map((x) => x.word).join(" ") === sentObj.en) {
         shuf = shuffle(shuf);
       }
       this.trPool = shuf;
@@ -1143,6 +1418,10 @@
 
     _trAddCar(carId) {
       if (this.trSolved) return;
+      if (this.trTrack.length >= this.trSent.tokens.length) {
+        if (window.SFX) window.SFX.bonk();
+        return;
+      }
       const car = this.trPool.find((c) => c.id === carId && !c.used);
       if (!car) return;
       if (window.SFX) window.SFX.pop();
@@ -1181,7 +1460,7 @@
       }
       if (goodLen < targetTokens.length) {
         const nextWord = targetTokens[goodLen];
-        const matchCar = this.trPool.find((c) => !c.used && c.word === nextWord);
+        const matchCar = this.trPool.find((c) => !c.used && !c.isDecoy && c.word === nextWord);
         if (matchCar) {
           this._trAddCar(matchCar.id);
         }
@@ -1231,6 +1510,8 @@
         <div class="train-arena-card">
           <div class="wb-header-row">
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+              <button type="button" class="scene-pill ${!this.trDecoyOn ? "active" : ""}" data-trmode="classic">🌱 纯正词块</button>
+              <button type="button" class="scene-pill ${this.trDecoyOn ? "active" : ""}" data-trmode="decoy">🔥 干扰词挑战 (+2假词)</button>
               <span class="mini-btn on" style="pointer-events:none;">${st.tag}</span>
               <span class="mini-btn" style="pointer-events:none;">🚂 已拼通 ${builtTotal} 句</span>
             </div>
@@ -1246,7 +1527,13 @@
               </div>
             </div>
             <div style="flex:1;min-width:220px;">
-              <div style="font-size:0.78rem;color:var(--c-warn-text);font-weight:900;">🎯 把下面散落的英文词块按顺序挂上小火车，拼出这句话：</div>
+              <div style="font-size:0.78rem;color:var(--c-warn-text);font-weight:900;">
+                ${
+                  this.trDecoyCount > 0
+                    ? `🎯 车库里混进了 ${this.trDecoyCount} 节【假词干扰车厢】，挑出正确的 ${st.tokens.length} 个词挂上火车：`
+                    : `🎯 把下面散落的 ${st.tokens.length} 个英文词块按顺序挂上小火车：`
+                }
+              </div>
               <div class="train-zh-goal">${this.app.ruby(st.zh)}</div>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -1330,6 +1617,17 @@
         </div>
       `;
 
+      mount.querySelectorAll("[data-trmode]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const wantDecoy = btn.getAttribute("data-trmode") === "decoy";
+          if (wantDecoy === this.trDecoyOn) return;
+          if (window.SFX) window.SFX.pop();
+          this.trDecoyOn = wantDecoy;
+          this.loadTrainSentence(this.trSent);
+          this.renderSubBody();
+        });
+      });
+
       const bOpen = document.getElementById("btnTrOpenCard");
       if (bOpen) bOpen.addEventListener("click", () => this.app.openSuperCard(st.cardId));
 
@@ -1391,16 +1689,19 @@
       const target = candidates[Math.floor(Math.random() * candidates.length)] || basePool[0];
       if (!target) return;
 
-      const distractors = shuffle(basePool.filter((v) => v.key !== target.key)).slice(0, 5);
+      // 从全书 251 词里挑最“长相像、读音近”的形近词当干扰项（绝不再随机出送分题！）
+      const distractors = pickConfusableVocab(target, this.allVocab, (this.bpCount || 6) - 1);
       const palette = [
         "linear-gradient(145deg, rgba(45,212,191,0.38), rgba(56,189,248,0.28))",
         "linear-gradient(145deg, rgba(251,191,36,0.38), rgba(249,115,22,0.26))",
         "linear-gradient(145deg, rgba(192,132,252,0.38), rgba(99,102,241,0.26))",
         "linear-gradient(145deg, rgba(251,113,133,0.38), rgba(244,63,94,0.26))",
         "linear-gradient(145deg, rgba(74,222,128,0.38), rgba(16,185,129,0.26))",
-        "linear-gradient(145deg, rgba(96,165,250,0.38), rgba(129,140,248,0.26))"
+        "linear-gradient(145deg, rgba(96,165,250,0.38), rgba(129,140,248,0.26))",
+        "linear-gradient(145deg, rgba(244,114,182,0.38), rgba(192,132,252,0.26))",
+        "linear-gradient(145deg, rgba(52,211,153,0.38), rgba(34,211,238,0.26))"
       ];
-      const borders = ["#2dd4bf", "#fbbf24", "#c084fc", "#fb7185", "#4ade80", "#60a5fa"];
+      const borders = ["#2dd4bf", "#fbbf24", "#c084fc", "#fb7185", "#4ade80", "#60a5fa", "#f472b6", "#34d399"];
 
       this.bpTarget = target;
       this.bpSolved = false;
@@ -1494,6 +1795,8 @@
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
               <button type="button" class="scene-pill ${this.bpMode === "listen" ? "active" : ""}" data-bpmode="listen">🔊 听英文戳泡泡</button>
               <button type="button" class="scene-pill ${this.bpMode === "meaning" ? "active" : ""}" data-bpmode="meaning">👀 看中文戳英文</button>
+              <button type="button" class="mini-btn ${this.bpCount === 6 ? "on" : ""}" data-bpcount="6">⚡ 6形近词</button>
+              <button type="button" class="mini-btn ${this.bpCount === 8 ? "on" : ""}" data-bpcount="8">🔥 8泡泡魔鬼</button>
               <span class="mini-btn" style="pointer-events:none;">🎈 累计戳破 ${totalPops} 个</span>
             </div>
             <div class="live-en-streak-pill">🔥 戳泡泡连击：${this.bpStreak}</div>
@@ -1527,10 +1830,11 @@
             </div>
           </div>
 
-          <div class="bubble-sky-stage">
+          <div class="bubble-sky-stage ${this.bpBubbles.length >= 8 ? "bubbles-8" : ""}">
             ${this.bpBubbles
-              .map(
-                (b) => `
+              .map((b) => {
+                const revealIcon = b.wrong || b.popped || this.bpSolved;
+                return `
               <button
                 type="button"
                 class="word-bubble-btn ${b.popped ? "is-popped" : ""} ${b.wrong ? "is-wrong" : ""}"
@@ -1539,12 +1843,12 @@
                 ${b.popped ? "disabled" : ""}
               >
                 <span class="bubble-shine"></span>
-                <span class="bubble-emoji">${b.vocab.icon || "🫧"}</span>
+                ${revealIcon ? `<span class="bubble-emoji">${b.vocab.icon || "🫧"}</span>` : `<span class="bubble-dot-badge">🫧</span>`}
                 <span class="bubble-word">${esc(b.vocab.w)}</span>
                 ${b.wrong || this.bpSolved ? `<span class="bubble-sub-zh">${esc(b.vocab.zh)}</span>` : ""}
               </button>
-            `
-              )
+            `;
+              })
               .join("")}
           </div>
 
@@ -1556,6 +1860,17 @@
         btn.addEventListener("click", () => {
           if (window.SFX) window.SFX.pop();
           this.bpMode = btn.getAttribute("data-bpmode");
+          this.setupBubbleRound(true);
+          this.renderSubBody();
+        });
+      });
+
+      mount.querySelectorAll("[data-bpcount]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const nextCnt = parseInt(btn.getAttribute("data-bpcount"), 10) || 6;
+          if (nextCnt === this.bpCount) return;
+          if (window.SFX) window.SFX.pop();
+          this.bpCount = nextCnt;
           this.setupBubbleRound(true);
           this.renderSubBody();
         });
