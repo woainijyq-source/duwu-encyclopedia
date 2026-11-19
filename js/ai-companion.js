@@ -25,6 +25,7 @@
       this.history = []; // [{ role: "user"|"assistant", content: "..." }]
       this.activeCard = null;
       this.reqSeq = 0;
+      this.chatLang = "zh"; // 'zh' | 'en'
 
       this._initDOM();
       this._initSpeechRecognition();
@@ -62,7 +63,12 @@
                 <div class="ai-context-sub" id="aiContextSub">随时提问 · 边聊百科边学英文</div>
               </div>
             </div>
-            <button type="button" class="close-circle-btn" id="btnCloseAiCompanion" aria-label="关闭互动面板" style="position:static;width:40px;height:40px;">✕</button>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+              <button type="button" class="mini-btn" id="btnAiLangToggle" title="切换中文百科问答或纯英文外教对话">
+                🇬🇧 切英文对话
+              </button>
+              <button type="button" class="close-circle-btn" id="btnCloseAiCompanion" aria-label="关闭互动面板" style="position:static;width:40px;height:40px;">✕</button>
+            </div>
           </div>
 
           <!-- 对话展示区（带逐句放大高亮与中英穿插胶囊） -->
@@ -131,6 +137,20 @@
       this.sendVoiceBtnEl = document.getElementById("btnAiSendVoice");
       this.textFormEl = document.getElementById("aiTextForm");
       this.textInputEl = document.getElementById("aiTextInput");
+      this.langToggleBtnEl = document.getElementById("btnAiLangToggle");
+
+      if (this.langToggleBtnEl) {
+        this.langToggleBtnEl.addEventListener("click", () => {
+          if (window.SFX) window.SFX.pop();
+          this.stopListening({ submitIfText: false });
+          this.chatLang = this.chatLang === "zh" ? "en" : "zh";
+          if (this.recognition) {
+            this.recognition.lang = this.chatLang === "en" ? "en-US" : "zh-CN";
+          }
+          this._syncLangModeUI();
+          this._renderQuickChips(this.activeCard);
+        });
+      }
 
       document.getElementById("btnCloseAiCompanion").addEventListener("click", () => this.close());
       backdrop.addEventListener("click", (e) => {
@@ -304,9 +324,44 @@
       }
     }
 
+    _syncLangModeUI() {
+      const isEn = this.chatLang === "en";
+      if (this.langToggleBtnEl) {
+        this.langToggleBtnEl.classList.toggle("on", isEn);
+        this.langToggleBtnEl.textContent = isEn ? "🇬🇧 English ON" : "🇬🇧 切英文对话";
+      }
+      if (this.textInputEl) {
+        this.textInputEl.placeholder = isEn
+          ? "Ask in English! e.g. Is it venom or poison?"
+          : "也可以在这里打字或用键盘语音输入问题…";
+      }
+      if (!this.isListening && this.micLabelEl) {
+        this.micLabelEl.textContent = isEn ? "Speak English" : "点我跟 AI 说话";
+      }
+    }
+
     _renderQuickChips(card) {
       let questions = [];
-      if (card && card.name) {
+      const ce = card && card.id && window.CURIOSITY_ENGLISH_DATA ? window.CURIOSITY_ENGLISH_DATA[card.id] : null;
+      if (this.chatLang === "en") {
+        if (card && card.name) {
+          const enName = (ce && ce.enName) || card.name;
+          questions = [
+            `🧪 Does ${enName} use venom or poison?`,
+            `✨ Tell me a fun fact about ${enName} in easy English!`,
+            `🔤 Teach me 3 science words for ${enName}!`,
+            `🛡️ How can I stay safe around ${enName}?`,
+            `🎯 Give me a fun English quiz about ${enName}!`
+          ];
+        } else {
+          questions = [
+            `🐸 Why is the Poison Dart Frog so bright yellow?`,
+            `⚖️ What is the difference between venom and poison?`,
+            `🐙 Tell me about the Blue-Ringed Octopus in easy English!`,
+            `🍫 Why can't dogs eat dark chocolate?`
+          ];
+        }
+      } else if (card && card.name) {
         questions = [
           `🎬 ${card.name}在真实大自然里平时是怎么生活和防身的？`,
           `🧬 为什么${card.name}自己的毒素不会把自己毒倒呀？`,
@@ -371,6 +426,7 @@
         this.contextSubEl.textContent = "随时跟 AI 说话提问 · 边听故事边学英文";
       }
 
+      this._syncLangModeUI();
       this._renderQuickChips(this.activeCard);
       this.isOpen = true;
       this.backdropEl.classList.add("open");
@@ -452,24 +508,13 @@
         };
       }
 
-      try {
-        const res = await fetch("./api/chat", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            question,
-            card: cardPayload,
-            history: this.history.slice(-4)
-          })
-        });
-        const data = await res.json();
-        if (mySeq !== this.reqSeq) return;
+      const outboundQuestion =
+        this.chatLang === "en"
+          ? `[Please answer in friendly, simple English suitable for an 8-year-old learner (2-4 short sentences), then add one tiny Chinese translation line at the end.] ${question}`
+          : question;
 
-        if (!res.ok || !data || !data.ok || !data.reply) {
-          throw new Error((data && data.error) || `http_${res.status}`);
-        }
-
-        const reply = String(data.reply).trim();
+      const renderFinalReply = (replyText, preferEnglishVoice) => {
+        const reply = String(replyText || "").trim();
         this.history.push({ role: "user", content: question });
         this.history.push({ role: "assistant", content: reply });
 
@@ -482,6 +527,11 @@
 
         const playReplyAudio = () => {
           if (!window.DoubaoTTS) return;
+          if (preferEnglishVoice && window.DoubaoTTS.speakEnglish) {
+            const enOnly = reply.split("\n")[0];
+            window.DoubaoTTS.speakEnglish(enOnly, { repeat: 1 });
+            return;
+          }
           window.DoubaoTTS.speak(null, {
             toggleIfPlaying: true,
             scopeEl: replyScopeEl,
@@ -494,25 +544,107 @@
         replayBtnEl.addEventListener("click", () => playReplyAudio());
         replyBodyEl.addEventListener("click", () => playReplyAudio());
 
-        // 自动用豆包语音朗读回答，并带逐句字体放大与动态高亮！
         if (window.DoubaoTTS && window.DoubaoTTS.enabled) {
-          window.DoubaoTTS.speak(null, {
-            scopeEl: replyScopeEl,
-            triggerBtn: replayBtnEl,
-            statusMountEl,
-            defaultBtnHTML: "🔊 给我讲解",
-            playTapSfx: false
-          });
+          if (preferEnglishVoice && window.DoubaoTTS.speakEnglish) {
+            const enOnly = reply.split("\n")[0];
+            window.DoubaoTTS.speakEnglish(enOnly, { repeat: 1, playTapSfx: false });
+          } else {
+            window.DoubaoTTS.speak(null, {
+              scopeEl: replyScopeEl,
+              triggerBtn: replayBtnEl,
+              statusMountEl,
+              defaultBtnHTML: "🔊 给我讲解",
+              playTapSfx: false
+            });
+          }
         }
+      };
+
+      try {
+        const res = await fetch("./api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question: outboundQuestion,
+            card: cardPayload,
+            history: this.history.slice(-4)
+          })
+        });
+        const data = await res.json();
+        if (mySeq !== this.reqSeq) return;
+
+        if (!res.ok || !data || !data.ok || !data.reply) {
+          throw new Error((data && data.error) || `http_${res.status}`);
+        }
+
+        renderFinalReply(data.reply, this.chatLang === "en");
       } catch (_) {
         if (mySeq !== this.reqSeq) return;
-        statusMountEl.innerHTML = "";
-        replyBodyEl.innerHTML = `<span style="color:#fb7185;font-weight:800;">网络小信号打了个盹，请再点一次问题试试吧！</span>`;
+        const fallback = this._buildLocalFallbackReply(question, this.activeCard);
+        renderFinalReply(fallback, this.chatLang === "en");
       } finally {
         if (mySeq === this.reqSeq) {
           this.isThinking = false;
         }
       }
+    }
+
+    _buildLocalFallbackReply(question, card) {
+      const qLow = String(question || "").toLowerCase();
+      let target = card;
+      if (!target && Array.isArray(window.CATALOG_DATA)) {
+        target =
+          window.CATALOG_DATA.find(
+            (x) =>
+              question.includes(x.name) ||
+              (window.CURIOSITY_ENGLISH_DATA &&
+                window.CURIOSITY_ENGLISH_DATA[x.id] &&
+                window.CURIOSITY_ENGLISH_DATA[x.id].enName &&
+                qLow.includes(window.CURIOSITY_ENGLISH_DATA[x.id].enName.toLowerCase()))
+          ) || null;
+      }
+      const ce = target && window.CURIOSITY_ENGLISH_DATA ? window.CURIOSITY_ENGLISH_DATA[target.id] : null;
+      const bi = target && window.BILINGUAL_NOTES ? window.BILINGUAL_NOTES[target.id] : null;
+
+      if (this.chatLang === "en") {
+        if (target && ce) {
+          const stratLine =
+            target.strategy === "venom"
+              ? `${ce.enName} uses VENOM — it bites, stings, or injects toxin!`
+              : target.strategy === "poison"
+              ? `${ce.enName} carries POISON — it protects itself if touched or eaten!`
+              : `${ce.enName} is a mineral or chemical toxin.`;
+          const words = (ce.vocab || []).map((v) => `${v.w} (${v.zh})`).join(", ");
+          const sceneLine = (ce.enScene && ce.enScene.en) || (bi && bi.en) || "";
+          if (qLow.includes("word") || qLow.includes("teach") || qLow.includes("vocab")) {
+            return `Great question! Here are 3 cool science words for ${ce.enName}: ${words}. ${sceneLine}\n（中文提示：${target.name}的三大核心英语词：${words}）`;
+          }
+          if (qLow.includes("quiz")) {
+            return `Mini English Quiz! Is ${ce.enName} VENOM or POISON? Hint: ${sceneLine}\n（中文小考：猜猜 ${target.name} 是主动注射的 Venom 还是被动防御的 Poison？）`;
+          }
+          return `${stratLine} ${sceneLine} Key words: ${words}.\n（中文提示：${target.summary}）`;
+        }
+        if (qLow.includes("venom") || qLow.includes("poison")) {
+          return `Easy rule! If it bites or stings you, it is VENOM. If you touch or eat it, it is POISON!\n（中文提示：主动咬或扎人的是 Venom 毒液，吃进或摸到中毒的是 Poison 毒物！）`;
+        }
+        if (qLow.includes("chocolate") || qLow.includes("dog")) {
+          return `Dark chocolate has theobromine. Human livers break it down fast, but dogs break it down very slowly, so chocolate is toxic for dogs!\n（中文提示：狗狗肝脏分解可可碱太慢，所以千万别喂狗狗吃巧克力！）`;
+        }
+        return `Awesome science question! Open any of the 99 cards and ask me in English about venom, poison, or science words!\n（中文提示：打开任意一张 99 百科卡，随时用英文问我毒物秘密或科学单词哦！）`;
+      }
+
+      if (target) {
+        const enLine = (ce && ce.enScene && ce.enScene.en) || (bi && bi.en) || "";
+        const words = ce && ce.vocab ? ce.vocab.map((v) => `${v.w}(${v.zh})`).join("、") : "";
+        if (question.includes("英语") || question.includes("单词") || question.includes("英文")) {
+          return `太棒啦！${target.name}的英文名字是 ${ce ? ce.enName : ""}！三个必学词是：${words}。快跟我读这句：${enLine}`;
+        }
+        if (question.includes("药") && target.biochemDeep) {
+          return `关于${target.name}的深度科学秘密：${target.biochemDeep} ${enLine ? `顺便学一句英文：${enLine}` : ""}`;
+        }
+        return `${target.name}的秘密武器是【${target.molecule}】！${target.summary}${ce && ce.lifeStory ? ` 生活中的例子：${ce.lifeStory}` : ""}${enLine ? ` 英文金句：${enLine}` : ""}`;
+      }
+      return `本地离线小百科来解答啦！记住三大口诀：①主动注射叫 Venom，吃摸防御叫 Poison；②剂量决定毒与药（The dose makes the poison!）；③快打开任意一张 99 百科闪卡问我专属问题吧！`;
     }
   }
 

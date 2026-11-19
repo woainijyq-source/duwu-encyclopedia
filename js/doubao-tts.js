@@ -198,6 +198,24 @@
       this.rafId = null;
       this.activeContext = null;       // { scopeEl, triggerBtn, statusMountEl, segments, timings, defaultBtnLabel }
       this.listeners = new Set();
+      this.enSlowMode = false;
+      this._enQueueTimers = [];
+      this._cachedVoices = [];
+
+      if ("speechSynthesis" in window) {
+        const refreshVoices = () => {
+          try {
+            const list = window.speechSynthesis.getVoices();
+            if (list && list.length) this._cachedVoices = list;
+          } catch (_) {}
+        };
+        refreshVoices();
+        try {
+          window.speechSynthesis.addEventListener("voiceschanged", refreshVoices);
+        } catch (_) {
+          window.speechSynthesis.onvoiceschanged = refreshVoices;
+        }
+      }
 
       this.audio.addEventListener("ended", () => {
         if (this.usingHtmlAudio && this.state === "playing") this._finishPlayback();
@@ -675,6 +693,10 @@
 
     stop() {
       this.reqToken++;
+      if (this._enQueueTimers && this._enQueueTimers.length) {
+        this._enQueueTimers.forEach((t) => clearTimeout(t));
+        this._enQueueTimers = [];
+      }
       try {
         this.audio.pause();
       } catch (_) {}
@@ -684,6 +706,162 @@
         } catch (_) {}
       }
       this._finishPlayback();
+    }
+
+    _pickVoice(langPrefix) {
+      if (!("speechSynthesis" in window)) return null;
+      let voices = [];
+      try {
+        voices = window.speechSynthesis.getVoices() || [];
+      } catch (_) {}
+      if (!voices.length && this._cachedVoices && this._cachedVoices.length) {
+        voices = this._cachedVoices;
+      }
+      if (!voices.length) return null;
+      const prefix = String(langPrefix || "en").toLowerCase();
+      const matches = voices.filter((v) => String(v.lang || "").toLowerCase().startsWith(prefix));
+      if (!matches.length) return null;
+      if (prefix.startsWith("en")) {
+        const preferred = [
+          "Samantha", "Ava", "Google US English", "Karen", "Daniel", "Moira", "Alex", "Victoria", "Serena"
+        ];
+        for (const name of preferred) {
+          const hit = matches.find((v) => v.name && v.name.includes(name));
+          if (hit) return hit;
+        }
+        const enUS = matches.find((v) => /en[-_]us/i.test(v.lang));
+        return enUS || matches[0];
+      }
+      const zhCN = matches.find((v) => /zh[-_]cn/i.test(v.lang));
+      return zhCN || matches[0];
+    }
+
+    // 清晰纯粹的英语朗读（0ms本地即时发声，支持 🐢 慢速清晰 / 🐇 常速 & 自动选高质英文音色）
+    speakEnglish(enText, options) {
+      const opts = options || {};
+      if (!this.enabled) return;
+      const clean = String(enText || "").replace(EMOJI_RE, " ").replace(/—/g, ", ").replace(/\s+/g, " ").trim();
+      if (!clean) return;
+
+      this._ensureAudioContext();
+      if (window.SFX && opts.playTapSfx !== false) {
+        window.SFX.pop();
+      }
+
+      const wasBusy =
+        "speechSynthesis" in window && (window.speechSynthesis.speaking || window.speechSynthesis.pending);
+      this.stop();
+      const myToken = ++this.reqToken;
+      if (!("speechSynthesis" in window)) {
+        if (typeof opts.onEnd === "function") opts.onEnd();
+        return;
+      }
+
+      const isSlow = typeof opts.slow === "boolean" ? opts.slow : this.enSlowMode;
+      const rate = typeof opts.rate === "number" ? opts.rate : isSlow ? 0.68 : 0.92;
+      const repeat = Math.max(1, Math.min(3, opts.repeat || 1));
+
+      const speakOnce = (remaining) => {
+        if (myToken !== this.reqToken || !this.enabled) return;
+        try {
+          const u = new SpeechSynthesisUtterance(clean);
+          u.lang = "en-US";
+          u.rate = rate;
+          u.pitch = 1.04;
+          const v = this._pickVoice("en");
+          if (v) u.voice = v;
+          u.onend = () => {
+            if (myToken !== this.reqToken) return;
+            if (remaining > 1) {
+              const t = setTimeout(() => speakOnce(remaining - 1), 240);
+              this._enQueueTimers.push(t);
+            } else if (typeof opts.onEnd === "function") {
+              opts.onEnd();
+            }
+          };
+          u.onerror = () => {
+            if (myToken === this.reqToken && typeof opts.onEnd === "function") opts.onEnd();
+          };
+          window.speechSynthesis.speak(u);
+        } catch (_) {
+          if (typeof opts.onEnd === "function") opts.onEnd();
+        }
+      };
+
+      if (wasBusy) {
+        const t = setTimeout(() => speakOnce(repeat), 40);
+        this._enQueueTimers.push(t);
+      } else {
+        speakOnce(repeat);
+      }
+    }
+
+    // 双语单词卡清晰朗读：纯正英文单词×2 -> 中文意思 -> 英文例句（告别中式音色念英文！）
+    speakBilingualWord(word, zh, exampleEn, options) {
+      const opts = options || {};
+      if (!this.enabled) return;
+      const wClean = String(word || "").trim();
+      if (!wClean) return;
+
+      this._ensureAudioContext();
+      if (window.SFX && opts.playTapSfx !== false) {
+        window.SFX.pop();
+      }
+
+      const wasBusy =
+        "speechSynthesis" in window && (window.speechSynthesis.speaking || window.speechSynthesis.pending);
+      this.stop();
+      const myToken = ++this.reqToken;
+      if (!("speechSynthesis" in window)) return;
+
+      const isSlow = typeof opts.slow === "boolean" ? opts.slow : this.enSlowMode;
+      const enRate = isSlow ? 0.68 : 0.9;
+      const queue = [
+        { text: wClean, lang: "en-US", rate: enRate, pauseAfter: 200 },
+        { text: wClean, lang: "en-US", rate: enRate, pauseAfter: 240 }
+      ];
+      if (zh && opts.includeZh !== false) {
+        queue.push({ text: String(zh).trim(), lang: "zh-CN", rate: 0.98, pauseAfter: 240 });
+      }
+      if (exampleEn && opts.includeExample !== false) {
+        queue.push({ text: String(exampleEn).trim(), lang: "en-US", rate: isSlow ? 0.72 : 0.92, pauseAfter: 0 });
+      }
+
+      const runStep = (idx) => {
+        if (myToken !== this.reqToken || !this.enabled || idx >= queue.length) {
+          if (myToken === this.reqToken && typeof opts.onEnd === "function") opts.onEnd();
+          return;
+        }
+        const item = queue[idx];
+        try {
+          const u = new SpeechSynthesisUtterance(item.text);
+          u.lang = item.lang;
+          u.rate = item.rate;
+          u.pitch = item.lang.startsWith("en") ? 1.04 : 1.06;
+          const v = this._pickVoice(item.lang.slice(0, 2));
+          if (v) u.voice = v;
+          u.onend = () => {
+            if (myToken !== this.reqToken) return;
+            if (item.pauseAfter > 0 && idx + 1 < queue.length) {
+              const t = setTimeout(() => runStep(idx + 1), item.pauseAfter);
+              this._enQueueTimers.push(t);
+            } else {
+              runStep(idx + 1);
+            }
+          };
+          u.onerror = () => runStep(idx + 1);
+          window.speechSynthesis.speak(u);
+        } catch (_) {
+          runStep(idx + 1);
+        }
+      };
+
+      if (wasBusy) {
+        const t = setTimeout(() => runStep(0), 40);
+        this._enQueueTimers.push(t);
+      } else {
+        runStep(0);
+      }
     }
 
     _collectSegments(opts, fallbackText) {
@@ -879,8 +1057,10 @@
             }
             const u = new SpeechSynthesisUtterance(key);
             u.lang = hasChinese ? "zh-CN" : "en-US";
-            u.rate = hasChinese ? 0.98 : 0.9;
+            u.rate = hasChinese ? 0.98 : (this.enSlowMode ? 0.72 : 0.9);
             u.pitch = 1.06;
+            const preferredVoice = this._pickVoice(hasChinese ? "zh" : "en");
+            if (preferredVoice) u.voice = preferredVoice;
             u.onend = () => {
               if (myToken === this.reqToken) this._finishPlayback();
             };

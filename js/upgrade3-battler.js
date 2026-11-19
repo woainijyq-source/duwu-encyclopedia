@@ -432,6 +432,8 @@
       }
 
       const ph = this.getPhoto(card.id);
+      const ce = (window.CURIOSITY_ENGLISH_DATA && window.CURIOSITY_ENGLISH_DATA[card.id]) || null;
+      const enSub = ce && ce.enName ? `<div class="bcard-en-name">🇬🇧 ${ce.enName}</div>` : "";
       const stratBadge = card.isProteinVenom
         ? `<span class="bchip venom">🗡️蛋白毒</span>`
         : card.strategy === "poison"
@@ -450,6 +452,7 @@
           </div>
           <div class="bcard-body">
             <div class="bcard-name">${card.emoji} ${this.ruby(card.name)}</div>
+            ${enSub}
             <div class="bcard-chips">${stratBadge}${heatBadge}</div>
           </div>
         </button>
@@ -516,6 +519,16 @@
             <div class="clash-tts-status"></div>
             <div style="font-weight:900;font-size:1.08rem;color:${winBannerColor};">${out.badge}</div>
             <div class="tts-clauses-body" style="font-weight:700;font-size:0.95rem;margin-top:4px;line-height:1.72;">${window.DoubaoTTS && window.DoubaoTTS.renderClausesHTML ? window.DoubaoTTS.renderClausesHTML(out.verdict, this.ruby) : this.ruby(out.verdict)}</div>
+            ${(() => {
+              const enChips = [this.topPicked, this.botPicked]
+                .filter((c) => c && !c.isTactical && window.CURIOSITY_ENGLISH_DATA && window.CURIOSITY_ENGLISH_DATA[c.id] && window.CURIOSITY_ENGLISH_DATA[c.id].enName)
+                .map((c) => {
+                  const en = window.CURIOSITY_ENGLISH_DATA[c.id].enName;
+                  return `<button type="button" class="mini-btn on battle-en-say" data-say="${en.replace(/"/g, "&quot;")}" style="padding:4px 11px;min-height:30px;font-size:0.78rem;">🇬🇧 🔊 ${en}</button>`;
+                })
+                .join("");
+              return enChips ? `<div style="margin-top:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;">${enChips}</div>` : "";
+            })()}
             <div style="margin-top:10px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
               ${
                 this.phase === "gameover"
@@ -594,6 +607,15 @@
         el.style.cursor = "pointer";
         el.removeAttribute("disabled");
         el.addEventListener("click", () => this.onOpenCard(el.getAttribute("data-arch")));
+      });
+
+      this.container.querySelectorAll(".battle-en-say").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const phrase = btn.getAttribute("data-say");
+          if (phrase && window.DoubaoTTS && window.DoubaoTTS.speakEnglish) {
+            window.DoubaoTTS.speakEnglish(phrase, { repeat: 2 });
+          }
+        });
       });
 
       const nextBtn = this.container.querySelector("#btnBattleNextRound");

@@ -7,11 +7,11 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="奇妙毒物游乐园" />
-  <title>奇妙毒物科学游乐园 · 99实景短片·写实配音剧场·生活实例·十万个为什么·趣味英语</title>
-  <link rel="manifest" href="manifest.webmanifest?v=6.0" />
-  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=6.0" />
-  <link rel="icon" type="image/png" href="assets/icon-512.png?v=6.0" />
-  <link rel="stylesheet" href="css/styles.css?v=6.0" />
+  <title>奇妙毒物科学游乐园 · 99实景短片·英语拼词造句翻翻乐·Venom分类·安全大冒险</title>
+  <link rel="manifest" href="manifest.webmanifest?v=7.0" />
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png?v=7.0" />
+  <link rel="icon" type="image/png" href="assets/icon-512.png?v=7.0" />
+  <link rel="stylesheet" href="css/styles.css?v=7.0" />
 </head>
 <body>
 
@@ -23,16 +23,17 @@
         <span>奇妙毒物游乐园</span>
       </div>
 
-      <nav class="stage-tabs" aria-label="四大互动游乐场">
-        <button class="stage-tab active" data-stage="world">🗺️ 生态寻宝 &amp; 99实拍卡</button>
-        <button class="stage-tab" data-stage="biolab">🔬 分子手术 &amp; 借毒养成</button>
-        <button class="stage-tab" data-stage="pharmacy">💊 化毒为药急诊室</button>
-        <button class="stage-tab" data-stage="detective">🃏 王牌对战 &amp; 四大找茬</button>
+      <nav class="stage-tabs" aria-label="五大互动游乐场">
+        <button class="stage-tab active" data-stage="world">🗺️ 生态 &amp; 99卡</button>
+        <button class="stage-tab" data-stage="biolab">🔬 分子 &amp; 养成</button>
+        <button class="stage-tab" data-stage="pharmacy">💊 化毒为药</button>
+        <button class="stage-tab" data-stage="detective">🃏 对战 &amp; 闯关</button>
+        <button class="stage-tab stage-tab-en" data-stage="english">🇬🇧 英语游乐场</button>
       </nav>
 
       <div class="utility-pills">
-        <button class="mini-btn on" id="btnIntroVideo" title="观看项目介绍视频">🎬 介绍视频</button>
-        <div class="star-counter" id="starCounter">⭐ 0</div>
+        <button class="mini-btn on" id="btnIntroVideo" title="观看项目介绍视频">🎬 介绍</button>
+        <button type="button" class="star-counter" id="starCounter" title="打开小馆长科学英语护照与每日探索任务">⭐ 0 <span class="passport-chip-tag">🏅护照</span></button>
         <button class="mini-btn on" id="btnSound" title="音效开关">🔊 音效</button>
         <button class="mini-btn on" id="btnPinyin" title="生僻字拼音开关">🔤 拼音</button>
         <button class="mini-btn" id="btnTheme" title="深浅主题">☀️ 亮色</button>
@@ -186,14 +187,18 @@
       </div>
     </section>
 
-    <!-- ==================== 第 4 站：99王牌生化对战 + 四大绘本场景找毒物 + 闪卡抢答 ==================== -->
+    <!-- ==================== 第 4 站：99王牌生化对战 + 四大绘本场景找毒物 + 闪卡抢答 + 实况英语 + Venom分类 + 安全大冒险 ==================== -->
     <section id="stage-detective" class="stage-view">
       <div class="biolab-mode-bar" style="justify-content:space-between;align-items:center;">
         <div style="display:flex;gap:10px;flex-wrap:wrap;">
           <button class="magic-pill active det-sub-btn" data-dsub="battler">🃏 游戏1：大百科 99 王牌生化对战</button>
           <button class="magic-pill det-sub-btn" data-dsub="hunt" id="btnDetHuntTab">👀 游戏2：四大场景找毒物（0/25）</button>
           <button class="magic-pill det-sub-btn" data-dsub="flashpk">📸 游戏3：看真身照片 · 抢答目录</button>
-          <button class="magic-pill det-sub-btn" data-dsub="liveen">🎬🇬🇧 游戏4：实况侦探 &amp; 毒物英语闯关</button>
+          <button class="magic-pill det-sub-btn" data-dsub="liveen">🎬🇬🇧 游戏4：实况侦探 &amp; 英语填空</button>
+          <button class="magic-pill det-sub-btn" data-dsub="classify">⚖️ 游戏5：Venom vs Poison 分类实验室</button>
+          <button class="magic-pill det-sub-btn" data-dsub="safety">🛡️ 游戏6：生活安全大冒险 (16关)</button>
+          <button class="magic-pill det-sub-btn" data-dsub="mystery">🕵️ 游戏7：神秘毒物三步破案</button>
+          <button class="magic-pill det-sub-btn" data-dsub="myths">⚡ 游戏8：真假科学大法官 (24关)</button>
         </div>
         <div id="huntToolbar" style="display:none;gap:8px;">
           <button class="mini-btn on" id="btnHuntHint">💡 放大镜提示</button>
@@ -224,10 +229,35 @@
         <div class="flashcard-arena" id="flashcardArena"></div>
       </div>
 
-      <!-- 子游戏 4（v5.0新增）：真实实况观察侦探 & 毒物英语听力大闯关 -->
+      <!-- 子游戏 4（v5.0/v7.0）：真实实况观察侦探 & 毒物英语听力/填空大闯关 -->
       <div id="detLiveEnPanel" style="display:none;">
         <div id="liveEnArenaMount"></div>
       </div>
+
+      <!-- 子游戏 5（v7.0新增）：Venom vs Poison 与五大生化靶点分类实验室 -->
+      <div id="detClassifyPanel" style="display:none;">
+        <div id="toxClassifyMount"></div>
+      </div>
+
+      <!-- 子游戏 6（v7.0新增）：16关生活安全大冒险（含双语安全金句） -->
+      <div id="detSafetyPanel" style="display:none;">
+        <div id="safetyArenaMount"></div>
+      </div>
+
+      <!-- 子游戏 7（v7.0新增）：神秘毒物三步线索破案（95物种推理 + 英文情报） -->
+      <div id="detMysteryPanel" style="display:none;">
+        <div id="mysteryCaseMount"></div>
+      </div>
+
+      <!-- 子游戏 8（v7.0新增）：24关科学真假大法官（含英文科学结论跟读） -->
+      <div id="detMythPanel" style="display:none;">
+        <div id="mythBusterMount"></div>
+      </div>
+    </section>
+
+    <!-- ==================== 第 5 站（v7.0新增）：🇬🇧 毒物英语游乐场 ==================== -->
+    <section id="stage-english" class="stage-view">
+      <div id="englishPlaygroundMount"></div>
     </section>
 
   </main>
@@ -294,24 +324,26 @@
     </div>
   </div>
 
-  <script src="js/data-catalog.js?v=6.0"></script>
-  <script src="js/data-bilingual.js?v=6.0"></script>
-  <script src="js/data-real-videos.js?v=6.0"></script>
-  <script src="js/data-curiosity-english.js?v=6.0"></script>
-  <script src="js/data-card-interactions.js?v=6.0"></script>
-  <script src="js/data-tts-manifest.js?v=6.0"></script>
-  <script src="js/data-photos.js?v=6.0"></script>
-  <script src="js/data-molecules3d.js?v=6.0"></script>
-  <script src="js/data-labs.js?v=6.0"></script>
-  <script src="js/data-hunt-scenes.js?v=6.0"></script>
-  <script src="js/visualizers.js?v=6.0"></script>
-  <script src="js/doubao-tts.js?v=6.0"></script>
-  <script src="js/ai-companion.js?v=6.0"></script>
-  <script src="js/upgrade1-ecosystem.js?v=6.0"></script>
-  <script src="js/upgrade2-molsurgery.js?v=6.0"></script>
-  <script src="js/upgrade3-battler.js?v=6.0"></script>
-  <script src="js/upgrade4-voice.js?v=6.0"></script>
-  <script src="js/upgrade5-english-live.js?v=6.0"></script>
-  <script src="js/app.js?v=6.0"></script>
+  <script src="js/data-catalog.js?v=7.0"></script>
+  <script src="js/data-bilingual.js?v=7.0"></script>
+  <script src="js/data-real-videos.js?v=7.0"></script>
+  <script src="js/data-curiosity-english.js?v=7.0"></script>
+  <script src="js/data-card-interactions.js?v=7.0"></script>
+  <script src="js/data-tts-manifest.js?v=7.0"></script>
+  <script src="js/data-photos.js?v=7.0"></script>
+  <script src="js/data-molecules3d.js?v=7.0"></script>
+  <script src="js/data-labs.js?v=7.0"></script>
+  <script src="js/data-hunt-scenes.js?v=7.0"></script>
+  <script src="js/visualizers.js?v=7.0"></script>
+  <script src="js/doubao-tts.js?v=7.0"></script>
+  <script src="js/ai-companion.js?v=7.0"></script>
+  <script src="js/upgrade1-ecosystem.js?v=7.0"></script>
+  <script src="js/upgrade2-molsurgery.js?v=7.0"></script>
+  <script src="js/upgrade3-battler.js?v=7.0"></script>
+  <script src="js/upgrade4-voice.js?v=7.0"></script>
+  <script src="js/upgrade5-english-live.js?v=7.0"></script>
+  <script src="js/upgrade6-english-playground.js?v=7.0"></script>
+  <script src="js/upgrade7-knowledge-games.js?v=7.0"></script>
+  <script src="js/app.js?v=7.0"></script>
 </body>
 </html>

@@ -238,10 +238,13 @@
     const state = opts.state || {};
     const saveState = opts.saveState || (() => {});
     const stopVoiceStudio = opts.stopVoiceStudio || (() => {});
+    const trackMission = opts.trackMission || (() => {});
 
     if (!Array.isArray(state.unlockedCuriosities)) state.unlockedCuriosities = [];
     if (!Array.isArray(state.wonSpotChallenges)) state.wonSpotChallenges = [];
     if (!Array.isArray(state.wonEnShadowing)) state.wonEnShadowing = [];
+    if (!Array.isArray(state.masteredWords)) state.masteredWords = [];
+    if (!Array.isArray(state.wonCardSpelling)) state.wonCardSpelling = [];
 
     const extra = (window.CURIOSITY_ENGLISH_DATA && window.CURIOSITY_ENGLISH_DATA[item.id]) || null;
     const bi1 = (window.BILINGUAL_NOTES && window.BILINGUAL_NOTES[item.id]) || null;
@@ -398,6 +401,7 @@
                     state.wonSpotChallenges.push(item.id);
                     saveState();
                     addStars(2);
+                    trackMission("knowledge", 1);
                     btnSpot.classList.add("done");
                     btnSpot.textContent = "✅ 眼力已通关 (+2⭐)";
                   }
@@ -418,7 +422,7 @@
                   void ob.offsetWidth;
                   ob.classList.add("picked-wrong");
                   if (window.SFX) window.SFX.bonk();
-                  fb.innerHTML = `<div style="font-size:0.84rem;font-weight:800;color:#fbbf24;padding:4px;">💡 再仔细看看短片或照片里的细节，换另一个试试！</div>`;
+                  fb.innerHTML = `<div style="font-size:0.84rem;font-weight:800;color:var(--c-warn-text);padding:4px;">💡 再仔细看看短片或照片里的细节，换另一个试试！</div>`;
                 }
               });
             });
@@ -515,6 +519,9 @@
     const vocabList = Array.isArray(extra.vocab) ? extra.vocab : [];
     const enScene = extra.enScene || null;
     const shadowWon = state.wonEnShadowing.includes(item.id);
+    const spellWon = state.wonCardSpelling.includes(item.id);
+    const masteredSet = new Set(state.masteredWords || []);
+    const isEnSlow = Boolean(window.DoubaoTTS && window.DoubaoTTS.enSlowMode);
 
     rightExtraMount.innerHTML = `
       <!-- 模块 A：小朋友最好奇的「十万个为什么」深度语音故事区 -->
@@ -548,7 +555,7 @@
         <div id="curiosityAnswerStage"></div>
       </div>
 
-      <!-- 模块 B：🇬🇧 趣味英语小课堂（物种名片 + 点读科学词卡 + 双句跟读 + 开口测评） -->
+      <!-- 模块 B：🇬🇧 趣味英语小课堂（物种名片 + 点读科学词卡 + 双句跟读 + 拼词闯关 + 开口测评） -->
       <div class="english-explorer-card">
         <div class="en-explorer-header">
           <div class="en-species-badge" id="btnSpeakEnSpecies" title="点击跟读英文名字（读2遍）">
@@ -557,26 +564,45 @@
             ${extra.enPron ? `<span class="en-species-pron">${esc(extra.enPron)}</span>` : ""}
             <span class="en-tap-horn">🔊</span>
           </div>
-          <button type="button" class="en-shadow-entry-btn ${shadowWon ? "won" : ""}" id="btnToggleShadowing">
-            🎙️ ${shadowWon ? "跟读已摘星 🌟" : "我来开口读 (+2⭐)"}
-          </button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+            <button type="button" class="mini-btn ${isEnSlow ? "on" : ""}" id="btnCardEnSlow" style="padding:5px 10px;min-height:34px;font-size:0.78rem;" title="切换英语朗读慢速/常速">
+              ${isEnSlow ? "🐢 慢速" : "🐇 常速"}
+            </button>
+            ${
+              vocabList.length > 0
+                ? `<button type="button" class="en-spell-entry-btn ${spellWon ? "won" : ""}" id="btnToggleCardSpell">
+                     🧩 ${spellWon ? "拼词已通关 🌟" : "拼词闯关 (+2⭐)"}
+                   </button>`
+                : ""
+            }
+            <button type="button" class="en-shadow-entry-btn ${shadowWon ? "won" : ""}" id="btnToggleShadowing">
+              🎙️ ${shadowWon ? "跟读已摘星 🌟" : "我来开口读 (+2⭐)"}
+            </button>
+          </div>
         </div>
 
         <!-- 3 张可点读核心科学单词卡 -->
         <div class="en-vocab-grid">
           ${vocabList
             .map(
-              (v, vIdx) => `
-            <button type="button" class="en-vocab-pill" data-vidx="${vIdx}" title="点我听单词发音和例句">
+              (v, vIdx) => {
+                const isMast = masteredSet.has(String(v.w || "").toLowerCase());
+                return `
+            <button type="button" class="en-vocab-pill ${isMast ? "is-mastered" : ""}" data-vidx="${vIdx}" data-vkey="${esc(String(v.w || "").toLowerCase())}" title="点我听纯正英文发音和例句">
+              ${isMast ? `<span class="ev-mastered-dot" title="已掌握">✓</span>` : ""}
               <span class="ev-icon">${v.icon || "🔤"}</span>
               <span class="ev-word">${esc(v.w)}</span>
               <span class="ev-zh">${esc(v.zh)}</span>
             </button>
-          `
+          `;
+              }
             )
             .join("")}
         </div>
         <div id="enVocabExampleToast" class="en-vocab-toast" style="display:none;"></div>
+
+        <!-- 🧩 本卡 3 词字母积木拼词台 -->
+        <div id="enCardSpellStage" class="en-card-spell-stage" style="display:none;"></div>
 
         <!-- 进阶第 2 句情景双语胶囊（配合上方第 1 句，双句进阶磨耳朵！） -->
         ${
@@ -617,6 +643,7 @@
         state.unlockedCuriosities.push(cidKey);
         saveState();
         addStars(1);
+        trackMission("knowledge", 1);
         const targetBtn = qBtns[idx];
         if (targetBtn) {
           targetBtn.classList.add("unlocked");
@@ -708,6 +735,18 @@
       });
     }
 
+    // 绑定卡片内英语语速切换 (🐢 慢速 / 🐇 常速)
+    const btnCardEnSlow = document.getElementById("btnCardEnSlow");
+    if (btnCardEnSlow) {
+      btnCardEnSlow.addEventListener("click", () => {
+        if (window.SFX) window.SFX.pop();
+        const nextSlow = !(window.DoubaoTTS && window.DoubaoTTS.enSlowMode);
+        if (window.DoubaoTTS) window.DoubaoTTS.enSlowMode = nextSlow;
+        btnCardEnSlow.classList.toggle("on", nextSlow);
+        btnCardEnSlow.textContent = nextSlow ? "🐢 慢速" : "🐇 常速";
+      });
+    }
+
     // 绑定英文物种名片点读
     const btnEnSpecies = document.getElementById("btnSpeakEnSpecies");
     if (btnEnSpecies && extra.enName) {
@@ -717,6 +756,10 @@
         btnEnSpecies.classList.remove("pop-anim");
         void btnEnSpecies.offsetWidth;
         btnEnSpecies.classList.add("pop-anim");
+        if (window.DoubaoTTS && window.DoubaoTTS.enSlowMode && window.DoubaoTTS.speakEnglish) {
+          window.DoubaoTTS.speakEnglish(extra.enName, { slow: true, repeat: 2 });
+          return;
+        }
         const text = `${extra.enName}! ${extra.enName}! ${item.name}！`;
         speak(text, {
           toggleIfPlaying: true,
@@ -725,7 +768,7 @@
       });
     }
 
-    // 绑定 3 张科学单词点读卡
+    // 绑定 3 张科学单词点读卡（使用纯正英文+中文+英文例句分轨朗读！）
     const vocabToast = document.getElementById("enVocabExampleToast");
     rightExtraMount.querySelectorAll(".en-vocab-pill").forEach((pill) => {
       pill.addEventListener("click", () => {
@@ -738,20 +781,289 @@
         rightExtraMount.querySelectorAll(".en-vocab-pill").forEach((p) => p.classList.remove("active"));
         pill.classList.add("active");
 
-        const spoken = `${v.w}! ${v.w}! ${v.zh}！${v.ex || ""}`;
         if (vocabToast) {
           vocabToast.style.display = "block";
           vocabToast.innerHTML = `
             <span class="ev-toast-word">${v.icon || "🔤"} <strong>${esc(v.w)}</strong>（${esc(v.zh)}）</span>
             ${v.ex ? `<span class="ev-toast-ex">例句：<em>${esc(v.ex)}</em></span>` : ""}
+            ${v.ex ? `<button type="button" class="mini-btn" id="btnVocabSlowEx" style="padding:3px 9px;min-height:28px;font-size:0.75rem;margin-left:auto;">🐢 慢速听例句</button>` : ""}
           `;
+          const bSlowEx = document.getElementById("btnVocabSlowEx");
+          if (bSlowEx) {
+            bSlowEx.addEventListener("click", (ev) => {
+              ev.stopPropagation();
+              if (window.DoubaoTTS && window.DoubaoTTS.speakEnglish) {
+                window.DoubaoTTS.speakEnglish(v.ex, { slow: true, repeat: 1 });
+              }
+            });
+          }
         }
-        speak(spoken, {
-          toggleIfPlaying: true,
-          segments: [{ el: pill, text: spoken }]
-        });
+        if (window.DoubaoTTS && window.DoubaoTTS.speakBilingualWord) {
+          window.DoubaoTTS.speakBilingualWord(v.w, v.zh, v.ex);
+        } else {
+          const spoken = `${v.w}! ${v.w}! ${v.zh}！${v.ex || ""}`;
+          speak(spoken, {
+            toggleIfPlaying: true,
+            segments: [{ el: pill, text: spoken }]
+          });
+        }
       });
     });
+
+    // 绑定「🧩 拼词闯关 (+2⭐)」本卡 3 词字母积木拼词台
+    const btnToggleSpell = document.getElementById("btnToggleCardSpell");
+    const spellStage = document.getElementById("enCardSpellStage");
+    if (btnToggleSpell && spellStage && vocabList.length > 0) {
+      let curSpellIdx = 0;
+      const doneInCard = new Set();
+      vocabList.forEach((vv, idx) => {
+        if ((state.masteredWords || []).includes(String(vv.w || "").toLowerCase())) {
+          doneInCard.add(idx);
+        }
+      });
+      let tiles = [];
+      let slots = [];
+      let solvedCur = false;
+      let wrongSet = new Set();
+
+      const setupWord = (idx) => {
+        curSpellIdx = idx;
+        const v = vocabList[idx];
+        const letters = String(v.w || "").toLowerCase().replace(/[^a-z]/g, "").split("");
+        const shuf = letters.slice().sort(() => Math.random() - 0.5);
+        if (letters.length >= 3 && shuf.join("") === letters.join("")) shuf.reverse();
+        tiles = shuf.map((ch, i) => ({ id: i, ch, used: false }));
+        slots = letters.map(() => null);
+        solvedCur = false;
+        wrongSet = new Set();
+      };
+
+      const renderCardSpell = () => {
+        const v = vocabList[curSpellIdx];
+        if (!v) return;
+        const target = String(v.w || "").toLowerCase().replace(/[^a-z]/g, "");
+        const hasWrong = wrongSet.size > 0;
+        spellStage.innerHTML = `
+          <div class="shadow-mode-tabs">
+            ${vocabList
+              .map((vv, i) => {
+                const isDone = doneInCard.has(i) || (state.masteredWords || []).includes(String(vv.w || "").toLowerCase());
+                return `
+                  <button type="button" class="shadow-tab-pill ${i === curSpellIdx ? "active" : ""}" data-cspidx="${i}">
+                    ${isDone ? "✅" : vv.icon || "🔤"} 第${i + 1}词 · ${esc(vv.zh)}
+                  </button>
+                `;
+              })
+              .join("")}
+          </div>
+          <div class="card-spell-prompt">
+            <span>${v.icon || "🔤"} 拼出「<strong>${esc(v.zh)}</strong>」（${target.length} 个字母）</span>
+            <button type="button" class="mini-btn on" id="btnCardSpellHear" style="padding:4px 10px;min-height:30px;font-size:0.78rem;">🔊 听读音</button>
+          </div>
+          <div class="wb-slots-row compact ${solvedCur ? "solved" : ""} ${hasWrong ? "shake-row" : ""}">
+            ${slots
+              .map((s, si) => {
+                const cls = solvedCur
+                  ? "slot-solved"
+                  : wrongSet.has(si)
+                  ? "slot-wrong"
+                  : hasWrong && s && !wrongSet.has(si)
+                  ? "slot-right"
+                  : s && s.isHint
+                  ? "slot-hint"
+                  : s
+                  ? "slot-filled"
+                  : "slot-empty";
+                return `<button type="button" class="wb-letter-slot compact ${cls}" data-cspslot="${si}">${s ? esc(s.ch.toUpperCase()) : ""}</button>`;
+              })
+              .join("")}
+          </div>
+          <div class="wb-tiles-tray compact">
+            ${tiles
+              .map(
+                (t) => `
+              <button type="button" class="wb-letter-tile compact ${t.used ? "used" : ""}" data-csptile="${t.id}" ${t.used ? "disabled" : ""}>
+                ${esc(t.ch.toUpperCase())}
+              </button>
+            `
+              )
+              .join("")}
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px;justify-content:space-between;">
+            ${
+              solvedCur
+                ? `<span style="color:var(--c-ok-text);font-weight:900;font-size:0.88rem;">🎉 拼对啦！<strong>${esc(v.w)}</strong> = ${esc(v.zh)}！</span>
+                   ${
+                     curSpellIdx + 1 < vocabList.length
+                       ? `<button type="button" class="big-action-btn" id="btnCardSpellNext" style="padding:6px 14px;min-height:34px;font-size:0.82rem;">拼下一个词 ➜</button>`
+                       : `<span style="color:var(--c-gold-text);font-weight:900;font-size:0.84rem;">🏆 本卡 3 词全部拼通啦！</span>`
+                   }`
+                : `<div style="display:flex;gap:6px;flex-wrap:wrap;">
+                     <button type="button" class="mini-btn on" id="btnCardSpellHint" style="padding:4px 10px;min-height:32px;font-size:0.78rem;">💡 提示字母</button>
+                     <button type="button" class="mini-btn" id="btnCardSpellReset" style="padding:4px 10px;min-height:32px;font-size:0.78rem;">🔄 重拼</button>
+                   </div>
+                   ${hasWrong ? `<span style="color:var(--c-warn-text);font-weight:800;font-size:0.8rem;">点橙色格子退回字母再试试～</span>` : ""}`
+            }
+          </div>
+        `;
+
+        spellStage.querySelectorAll("[data-cspidx]").forEach((b) => {
+          b.addEventListener("click", () => {
+            if (window.SFX) window.SFX.pop();
+            setupWord(parseInt(b.getAttribute("data-cspidx"), 10) || 0);
+            renderCardSpell();
+          });
+        });
+
+        const bHear = document.getElementById("btnCardSpellHear");
+        if (bHear) {
+          bHear.addEventListener("click", () => {
+            if (window.DoubaoTTS && window.DoubaoTTS.speakEnglish) {
+              window.DoubaoTTS.speakEnglish(v.w, { repeat: 2 });
+            }
+          });
+        }
+
+        const checkSolved = () => {
+          if (slots.some((s) => !s)) return;
+          const attempt = slots.map((s) => s.ch).join("");
+          if (attempt === target) {
+            solvedCur = true;
+            wrongSet.clear();
+            doneInCard.add(curSpellIdx);
+            if (window.SFX) window.SFX.chime();
+            if (!state.masteredWords.includes(target)) {
+              state.masteredWords.push(target);
+              saveState();
+            }
+            // 点亮上方单词卡的已掌握绿勾
+            const pillEl = rightExtraMount.querySelector(`.en-vocab-pill[data-vkey="${target}"]`);
+            if (pillEl && !pillEl.classList.contains("is-mastered")) {
+              pillEl.classList.add("is-mastered");
+              const dot = document.createElement("span");
+              dot.className = "ev-mastered-dot";
+              dot.textContent = "✓";
+              pillEl.prepend(dot);
+            }
+            trackMission("words", 1);
+            if (window.DoubaoTTS && window.DoubaoTTS.speakBilingualWord) {
+              window.DoubaoTTS.speakBilingualWord(v.w, v.zh, v.ex, { includeZh: false, playTapSfx: false });
+            }
+            if (doneInCard.size >= vocabList.length && !state.wonCardSpelling.includes(item.id)) {
+              state.wonCardSpelling.push(item.id);
+              saveState();
+              addStars(2);
+              btnToggleSpell.classList.add("won");
+              btnToggleSpell.innerHTML = "🧩 拼词已通关 🌟";
+              if (window.PlaygroundFX) window.PlaygroundFX.celebrate(spellStage);
+            }
+          } else {
+            wrongSet.clear();
+            for (let i = 0; i < target.length; i++) {
+              if (slots[i] && slots[i].ch !== target[i]) wrongSet.add(i);
+            }
+            if (window.SFX) window.SFX.bonk();
+          }
+        };
+
+        spellStage.querySelectorAll("[data-csptile]").forEach((tb) => {
+          tb.addEventListener("click", () => {
+            if (solvedCur) return;
+            const tid = parseInt(tb.getAttribute("data-csptile"), 10);
+            const tile = tiles.find((t) => t.id === tid && !t.used);
+            const eIdx = slots.findIndex((s) => !s);
+            if (!tile || eIdx === -1) return;
+            if (window.SFX) window.SFX.pop();
+            tile.used = true;
+            slots[eIdx] = { tileId: tile.id, ch: tile.ch, isHint: false };
+            wrongSet.clear();
+            checkSolved();
+            renderCardSpell();
+          });
+        });
+
+        spellStage.querySelectorAll("[data-cspslot]").forEach((sb) => {
+          sb.addEventListener("click", () => {
+            if (solvedCur) return;
+            const si = parseInt(sb.getAttribute("data-cspslot"), 10);
+            const s = slots[si];
+            if (!s || s.isHint) return;
+            if (window.SFX) window.SFX.pop();
+            const tile = tiles.find((t) => t.id === s.tileId);
+            if (tile) tile.used = false;
+            slots[si] = null;
+            wrongSet.clear();
+            renderCardSpell();
+          });
+        });
+
+        const bHint = document.getElementById("btnCardSpellHint");
+        if (bHint) {
+          bHint.addEventListener("click", () => {
+            let idx = -1;
+            for (let i = 0; i < target.length; i++) {
+              if (!slots[i] || slots[i].ch !== target[i]) {
+                idx = i;
+                break;
+              }
+            }
+            if (idx === -1) return;
+            if (slots[idx]) {
+              const old = tiles.find((t) => t.id === slots[idx].tileId);
+              if (old) old.used = false;
+              slots[idx] = null;
+            }
+            let tile = tiles.find((t) => !t.used && t.ch === target[idx]);
+            if (!tile) {
+              for (let j = idx + 1; j < slots.length; j++) {
+                if (slots[j] && !slots[j].isHint && slots[j].ch === target[idx]) {
+                  tile = tiles.find((t) => t.id === slots[j].tileId);
+                  slots[j] = null;
+                  if (tile) tile.used = false;
+                  break;
+                }
+              }
+            }
+            if (!tile) return;
+            if (window.SFX) window.SFX.pop();
+            tile.used = true;
+            slots[idx] = { tileId: tile.id, ch: tile.ch, isHint: true };
+            wrongSet.clear();
+            checkSolved();
+            renderCardSpell();
+          });
+        }
+
+        const bReset = document.getElementById("btnCardSpellReset");
+        if (bReset) {
+          bReset.addEventListener("click", () => {
+            if (window.SFX) window.SFX.pop();
+            setupWord(curSpellIdx);
+            renderCardSpell();
+          });
+        }
+
+        const bNext = document.getElementById("btnCardSpellNext");
+        if (bNext) {
+          bNext.addEventListener("click", () => {
+            if (window.SFX) window.SFX.pop();
+            setupWord(curSpellIdx + 1);
+            renderCardSpell();
+          });
+        }
+      };
+
+      btnToggleSpell.addEventListener("click", () => {
+        if (window.SFX) window.SFX.pop();
+        if (spellStage.style.display === "block") {
+          spellStage.style.display = "none";
+        } else {
+          spellStage.style.display = "block";
+          setupWord(0);
+          renderCardSpell();
+        }
+      });
+    }
 
     // 绑定第 2 句情景双语点击跟读
     const sceneBox = document.getElementById("enSceneSentenceBox");
@@ -849,7 +1161,7 @@
               onListening: (msg) => {
                 btnMic.classList.add("listening");
                 btnMic.innerHTML = "⏹️ 读完点我完成";
-                if (fbBox) fbBox.innerHTML = `<span style="color:#fb7185;font-weight:900;">${esc(msg)}</span>`;
+                if (fbBox) fbBox.innerHTML = `<span style="color:var(--c-err-text);font-weight:900;">${esc(msg)}</span>`;
               },
               onInterim: (txt) => {
                 if (fbBox) fbBox.innerHTML = `🗣️ 听到你读：<strong>“${esc(txt)}”</strong>`;
@@ -871,6 +1183,7 @@
                   state.wonEnShadowing.push(item.id);
                   saveState();
                   addStars(2);
+                  trackMission("words", 1);
                   btnToggleShadow.classList.add("won");
                   btnToggleShadow.innerHTML = "🎙️ 跟读已摘星 🌟";
                 }
@@ -891,6 +1204,7 @@
                   state.wonEnShadowing.push(item.id);
                   saveState();
                   addStars(2);
+                  trackMission("words", 1);
                   btnToggleShadow.classList.add("won");
                   btnToggleShadow.innerHTML = "🎙️ 跟读已摘星 🌟";
                 }
@@ -924,7 +1238,7 @@
               onHint: (msg) => {
                 btnMic.classList.remove("listening");
                 btnMic.innerHTML = "🎙️ 点我大声跟读";
-                if (fbBox) fbBox.innerHTML = `<span style="color:#fbbf24;font-weight:800;">💡 ${esc(msg)}</span>`;
+                if (fbBox) fbBox.innerHTML = `<span style="color:var(--c-warn-text);font-weight:800;">💡 ${esc(msg)}</span>`;
               }
             });
           });
@@ -956,12 +1270,15 @@
       this.speak = this.opts.speak || (() => {});
       this.onWinStars = this.opts.onWinStars || (() => {});
       this.onOpenCard = this.opts.onOpenCard || (() => {});
+      this.onTrackMission = this.opts.onTrackMission || (() => {});
+      this.onMasterWord = this.opts.onMasterWord || (() => {});
 
-      this.mode = "live_guess"; // 'live_guess' | 'en_listen'
+      this.mode = "live_guess"; // 'live_guess' | 'en_listen' | 'en_cloze'
       this.streak = 0;
       this.currentAnswer = null;
       this.choices = [];
       this.answered = false;
+      this.clozeData = null;
     }
 
     init() {
@@ -991,7 +1308,63 @@
       );
     }
 
+    _buildWordRegex(word) {
+      const raw = String(word || "").trim().toLowerCase();
+      const escW = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const forms = [escW(raw) + "(?:s|es|ed|ing)?"];
+      if (raw.endsWith("y") && raw.length > 2) forms.push(escW(raw.slice(0, -1)) + "(?:ies|ied)");
+      if (raw.endsWith("f") && raw.length > 2) forms.push(escW(raw.slice(0, -1)) + "ves");
+      if (raw.endsWith("fe") && raw.length > 3) forms.push(escW(raw.slice(0, -2)) + "ves");
+      if (raw.endsWith("e") && raw.length > 2) forms.push(escW(raw.slice(0, -1)) + "(?:ed|ing)");
+      return new RegExp(`\\b(?:${forms.join("|")})\\b`, "i");
+    }
+
+    _getClozePool() {
+      const ceMap = window.CURIOSITY_ENGLISH_DATA || {};
+      const out = [];
+      for (const item of window.CATALOG_DATA || []) {
+        const ce = ceMap[item.id];
+        if (!ce || !Array.isArray(ce.vocab)) continue;
+        for (const v of ce.vocab) {
+          if (!v || !v.w || !v.ex) continue;
+          const re = this._buildWordRegex(v.w);
+          if (re.test(v.ex)) {
+            out.push({ item, vocab: v, re });
+          }
+        }
+      }
+      return out;
+    }
+
     nextRound() {
+      if (this.mode === "en_cloze") {
+        const pool = this._getClozePool();
+        if (pool.length < 4) return;
+        const pick = pool[Math.floor(Math.random() * pool.length)];
+        const seenW = new Set([pick.vocab.w.toLowerCase()]);
+        const distractors = [];
+        const shuffled = pool.slice().sort(() => Math.random() - 0.5);
+        for (const c of shuffled) {
+          const low = c.vocab.w.toLowerCase();
+          if (!seenW.has(low)) {
+            seenW.add(low);
+            distractors.push(c.vocab);
+            if (distractors.length >= 3) break;
+          }
+        }
+        this.currentAnswer = pick.item;
+        this.clozeData = {
+          vocab: pick.vocab,
+          re: pick.re,
+          options: [pick.vocab, ...distractors].sort(() => Math.random() - 0.5)
+        };
+        this.answered = false;
+        this.render();
+        setTimeout(() => this._playEnglishPrompt(false), 180);
+        return;
+      }
+
+      this.clozeData = null;
       const livePool = this._getLivePool();
       const enPool = this._getEnPool();
       const pool =
@@ -1014,18 +1387,31 @@
       this.render();
 
       if (this.mode === "en_listen") {
-        setTimeout(() => this._playEnglishPrompt(), 180);
+        setTimeout(() => this._playEnglishPrompt(false), 180);
       }
     }
 
-    _playEnglishPrompt() {
+    _playEnglishPrompt(slow) {
       const ans = this.currentAnswer;
       if (!ans) return;
+      if (this.mode === "en_cloze" && this.clozeData && this.clozeData.vocab) {
+        const ex = this.clozeData.vocab.ex;
+        if (window.DoubaoTTS && window.DoubaoTTS.speakEnglish) {
+          window.DoubaoTTS.speakEnglish(ex, { slow: Boolean(slow), repeat: 1 });
+        } else {
+          this.speak(ex);
+        }
+        return;
+      }
       const ce = (window.CURIOSITY_ENGLISH_DATA && window.CURIOSITY_ENGLISH_DATA[ans.id]) || {};
       const bi = (window.BILINGUAL_NOTES && window.BILINGUAL_NOTES[ans.id]) || {};
       const clueEn = (ce.enScene && ce.enScene.en) || bi.en || "";
       const spoken = `${ce.enName || ""}! ${ce.enName || ""}! ${clueEn}`;
-      this.speak(spoken);
+      if (window.DoubaoTTS && window.DoubaoTTS.speakEnglish) {
+        window.DoubaoTTS.speakEnglish(spoken, { slow: Boolean(slow), repeat: 1 });
+      } else {
+        this.speak(spoken);
+      }
     }
 
     render() {
@@ -1036,6 +1422,15 @@
       const rv = (window.REAL_VIDEOS && window.REAL_VIDEOS[ans.id]) || null;
       const clueEn = (ce.enScene && ce.enScene.en) || bi.en || "";
       const clueKw = (ce.enScene && ce.enScene.kw) || bi.kw || [];
+      const ansPhoto = this.getPhoto(ans.id);
+
+      const isCloze = this.mode === "en_cloze" && this.clozeData;
+      const clozeHtml = isCloze
+        ? esc(this.clozeData.vocab.ex).replace(
+            this._buildWordRegex(this.clozeData.vocab.w),
+            `<span class="wb-blank-pill">______</span>`
+          )
+        : "";
 
       this.mountEl.innerHTML = `
         <div class="live-en-arena-shell">
@@ -1046,6 +1441,9 @@
               </button>
               <button type="button" class="scene-pill ${this.mode === "en_listen" ? "active" : ""}" data-lemode="en_listen">
                 🇬🇧 模式B：听英语口令 · 闪电认毒物
+              </button>
+              <button type="button" class="scene-pill ${this.mode === "en_cloze" ? "active" : ""}" data-lemode="en_cloze">
+                🧩 模式C：听句填词 · 科学单词闪电战
               </button>
             </div>
             <div class="live-en-streak-pill">🔥 连胜：${this.streak} 题</div>
@@ -1066,6 +1464,24 @@
                   <button type="button" class="mini-btn" id="btnArenaEnHint">🇬🇧 听英文名提示</button>
                 </div>
               `
+                  : isCloze
+                  ? `
+                <div class="live-en-audio-box">
+                  ${ansPhoto ? `<img src="${esc(ansPhoto)}" alt="" style="width:92px;height:92px;object-fit:cover;border-radius:18px;border:2px solid var(--c-teal);margin-bottom:8px;" />` : `<div style="font-size:3rem;margin-bottom:6px;">${this.clozeData.vocab.icon || "🧩"}</div>`}
+                  <div style="font-size:0.86rem;color:var(--c-teal);font-weight:900;margin-bottom:6px;">
+                    来自【${this.ruby(ans.name)} · ${esc(ce.enName || "")}】的科学例句：
+                  </div>
+                  <div class="live-en-sentence" style="font-size:1.14rem;">${clozeHtml}</div>
+                  <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px;">
+                    <button type="button" class="big-action-btn" id="btnReplayEnClue" style="padding:9px 18px;min-height:40px;font-size:0.9rem;">
+                      🔊 再听整句
+                    </button>
+                    <button type="button" class="mini-btn on" id="btnReplayEnSlow">
+                      🐢 慢速细听
+                    </button>
+                  </div>
+                </div>
+              `
                   : `
                 <div class="live-en-audio-box">
                   <div style="font-size:3rem;margin-bottom:6px;">🇬🇧🎧</div>
@@ -1073,25 +1489,51 @@
                   <div class="live-en-big-word">${esc(ce.enName || "Mystery Creature")}</div>
                   ${ce.enPron ? `<div style="color:var(--text-muted);font-size:0.86rem;margin-bottom:8px;">${esc(ce.enPron)}</div>` : ""}
                   <div class="live-en-sentence">${highlightWords(clueEn, clueKw)}</div>
-                  <button type="button" class="big-action-btn" id="btnReplayEnClue" style="margin-top:14px;padding:10px 20px;min-height:42px;font-size:0.92rem;">
-                    🔊 再听一遍英语口令
-                  </button>
+                  <div style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:14px;">
+                    <button type="button" class="big-action-btn" id="btnReplayEnClue" style="padding:9px 18px;min-height:40px;font-size:0.9rem;">
+                      🔊 再听一遍口令
+                    </button>
+                    <button type="button" class="mini-btn on" id="btnReplayEnSlow">
+                      🐢 慢速清晰听
+                    </button>
+                  </div>
                 </div>
               `
               }
             </div>
 
-            <!-- 右侧四选一实拍图文选项 -->
+            <!-- 右侧四选一选项 -->
             <div>
               <h3 style="margin:0 0 12px;font-size:1.22rem;">
-                ${this.mode === "live_guess" ? "🕵️‍♀️ 镜头里的真实主角是哪一位？" : "🇬🇧 这句英语说的是大百科里的谁？"}
+                ${
+                  this.mode === "live_guess"
+                    ? "🕵️‍♀️ 镜头里的真实主角是哪一位？"
+                    : isCloze
+                    ? `🧩 选出横线里缺少的英文科学单词（意思：${esc(this.clozeData.vocab.icon || "")} ${esc(this.clozeData.vocab.zh)}）`
+                    : "🇬🇧 这句英语说的是大百科里的谁？"
+                }
               </h3>
               <div class="live-en-choices-grid">
-                ${this.choices
-                  .map((c) => {
-                    const cPhoto = this.getPhoto(c.id);
-                    const cExtra = (window.CURIOSITY_ENGLISH_DATA && window.CURIOSITY_ENGLISH_DATA[c.id]) || {};
-                    return `
+                ${
+                  isCloze
+                    ? this.clozeData.options
+                        .map(
+                          (vo) => `
+                        <button type="button" class="live-en-choice-card cloze-opt-card" data-cword="${esc(vo.w.toLowerCase())}">
+                          <div class="lec-thumb lec-emoji">${vo.icon || "🔤"}</div>
+                          <div class="lec-meta">
+                            <div class="lec-name cloze-opt-word">${esc(vo.w)}</div>
+                            <div class="lec-sub">${esc(vo.zh)}</div>
+                          </div>
+                        </button>
+                      `
+                        )
+                        .join("")
+                    : this.choices
+                        .map((c) => {
+                          const cPhoto = this.getPhoto(c.id);
+                          const cExtra = (window.CURIOSITY_ENGLISH_DATA && window.CURIOSITY_ENGLISH_DATA[c.id]) || {};
+                          return `
                       <button type="button" class="live-en-choice-card" data-cid="${c.id}">
                         ${
                           cPhoto
@@ -1110,8 +1552,9 @@
                         </div>
                       </button>
                     `;
-                  })
-                  .join("")}
+                        })
+                        .join("")
+                }
               </div>
 
               <div id="liveEnArenaFeedback" style="margin-top:14px;min-height:60px;"></div>
@@ -1131,19 +1574,80 @@
 
       const btnVoiceHint = document.getElementById("btnArenaVoiceHint");
       if (btnVoiceHint && ce.liveCommentary) {
-        // 提示时不直接念出物种名字：把名字替换成「这位神秘主角」
         const masked = String(ce.liveCommentary).split(ans.name).join("这位神秘主角");
         btnVoiceHint.addEventListener("click", () => this.speak(masked));
       }
 
       const btnEnHint = document.getElementById("btnArenaEnHint");
       if (btnEnHint && ce.enName) {
-        btnEnHint.addEventListener("click", () => this.speak(`${ce.enName}! ${ce.enName}!`));
+        btnEnHint.addEventListener("click", () => {
+          if (window.DoubaoTTS && window.DoubaoTTS.speakEnglish) {
+            window.DoubaoTTS.speakEnglish(ce.enName, { repeat: 2 });
+          } else {
+            this.speak(`${ce.enName}! ${ce.enName}!`);
+          }
+        });
       }
 
       const btnReplay = document.getElementById("btnReplayEnClue");
-      if (btnReplay) {
-        btnReplay.addEventListener("click", () => this._playEnglishPrompt());
+      if (btnReplay) btnReplay.addEventListener("click", () => this._playEnglishPrompt(false));
+      const btnReplaySlow = document.getElementById("btnReplayEnSlow");
+      if (btnReplaySlow) btnReplaySlow.addEventListener("click", () => this._playEnglishPrompt(true));
+
+      if (isCloze) {
+        const rightW = this.clozeData.vocab.w.toLowerCase();
+        this.mountEl.querySelectorAll(".cloze-opt-card").forEach((optBtn) => {
+          optBtn.addEventListener("click", () => {
+            const picked = optBtn.getAttribute("data-cword");
+            const fb = document.getElementById("liveEnArenaFeedback");
+            if (!fb) return;
+            if (picked === rightW) {
+              optBtn.classList.add("picked-right");
+              if (!this.answered) {
+                this.answered = true;
+                this.streak += 1;
+                this.onWinStars(2);
+                this.onTrackMission("words", 1);
+                this.onMasterWord(rightW);
+                const streakEl = this.mountEl.querySelector(".live-en-streak-pill");
+                if (streakEl) streakEl.textContent = `🔥 连胜：${this.streak} 题`;
+              }
+              if (window.SFX) window.SFX.chime();
+              if (window.PlaygroundFX) window.PlaygroundFX.celebrate(optBtn);
+              fb.innerHTML = `
+                <div class="arena-win-card">
+                  <div style="font-weight:900;font-size:1rem;color:var(--c-ok-text);">
+                    🎉 填词成功 (+2⭐)！<strong>${esc(this.clozeData.vocab.w)}</strong> = ${esc(this.clozeData.vocab.zh)}！
+                  </div>
+                  <div class="cloze-win-ex">
+                    ${esc(this.clozeData.vocab.ex)}
+                  </div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+                    <button type="button" class="mini-btn" id="btnArenaOpenArchive">📖 打开原书卡片</button>
+                    <button type="button" class="big-action-btn" id="btnArenaNext" style="padding:8px 18px;min-height:38px;font-size:0.9rem;">下一题 ➜</button>
+                  </div>
+                </div>
+              `;
+              if (window.DoubaoTTS && window.DoubaoTTS.speakEnglish) {
+                window.DoubaoTTS.speakEnglish(this.clozeData.vocab.ex, { playTapSfx: false });
+              }
+              const bOpen = document.getElementById("btnArenaOpenArchive");
+              if (bOpen) bOpen.addEventListener("click", () => this.onOpenCard(ans.id));
+              const bNext = document.getElementById("btnArenaNext");
+              if (bNext) bNext.addEventListener("click", () => this.nextRound());
+            } else {
+              optBtn.classList.remove("picked-wrong");
+              void optBtn.offsetWidth;
+              optBtn.classList.add("picked-wrong");
+              this.streak = 0;
+              const streakEl = this.mountEl.querySelector(".live-en-streak-pill");
+              if (streakEl) streakEl.textContent = `🔥 连胜：0 题`;
+              if (window.SFX) window.SFX.bonk();
+              fb.innerHTML = `<div style="color:var(--c-warn-text);font-weight:800;padding:6px;">💡 点左边【🐢 慢速细听】听听横线里念的是哪个英文词吧！</div>`;
+            }
+          });
+        });
+        return;
       }
 
       this.mountEl.querySelectorAll(".live-en-choice-card").forEach((cardBtn) => {
@@ -1158,6 +1662,7 @@
               this.answered = true;
               this.streak += 1;
               this.onWinStars(2);
+              this.onTrackMission(this.mode === "en_listen" ? "words" : "knowledge", 1);
               const streakEl = this.mountEl.querySelector(".live-en-streak-pill");
               if (streakEl) streakEl.textContent = `🔥 连胜：${this.streak} 题`;
             }
@@ -1168,7 +1673,7 @@
 
             fb.innerHTML = `
               <div class="arena-win-card">
-                <div style="font-weight:900;font-size:1rem;color:#4ade80;">
+                <div style="font-weight:900;font-size:1rem;color:var(--c-ok-text);">
                   🎉 答对啦 (+2⭐)！正是 ${this.ruby(ans.name)}（🇬🇧 ${esc(ce.enName || "")}）！
                 </div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;margin:8px 0;">${vocabChips}</div>
@@ -1192,7 +1697,7 @@
             const streakEl = this.mountEl.querySelector(".live-en-streak-pill");
             if (streakEl) streakEl.textContent = `🔥 连胜：0 题`;
             if (window.SFX) window.SFX.bonk();
-            fb.innerHTML = `<div style="color:#fbbf24;font-weight:800;padding:6px;">💡 差一点点哦！点左边的提示按钮听听线索再选吧！</div>`;
+            fb.innerHTML = `<div style="color:var(--c-warn-text);font-weight:800;padding:6px;">💡 差一点点哦！点左边的提示按钮听听线索再选吧！</div>`;
           }
         });
       });

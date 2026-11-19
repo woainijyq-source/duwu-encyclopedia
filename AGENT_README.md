@@ -1,6 +1,6 @@
 # 毒物大百科 · Agent README
 
-> 更新时间：2026-11-18（v6.0 升级更新）｜ 本文件是该项目的唯一入口文档，不含任何密钥
+> 更新时间：2026-11-18（v7.0 互动知识与英语游乐场升级）｜ 本文件是该项目的唯一入口文档，不含任何密钥
 
 ## 1. 项目背景
 
@@ -16,8 +16,8 @@
 
 ### 3.1 技术栈与运行形态
 
-- 前端：纯静态 HTML + CSS + 原生 JavaScript，无框架、无构建、无 npm、无 CDN 外链（README.md；仓库内无 package.json）。`index.html` 单页按固定顺序注入 19 个 `js/*.js`（全部带 `?v=6.0` 查询串）。数据全部内嵌为 JS 文件（如 `js/data-catalog.js` 74 KB、`js/data-curiosity-english.js` 450+ KB）。
-- PWA：`manifest.webmanifest` + `sw.js`（缓存名 `duwu-playground-v6.0`），支持 iPad Safari「添加到主屏幕」离线秒开；`.mp4` 与 Range 请求永不走缓存（sw.js 注释）。
+- 前端：纯静态 HTML + CSS + 原生 JavaScript，无框架、无构建、无 npm、无 CDN 外链（README.md；仓库内无 package.json）。`index.html` 单页按固定顺序注入 21 个 `js/*.js`（全部带 `?v=7.0` 查询串）。数据全部内嵌为 JS 文件（如 `js/data-catalog.js` 74 KB、`js/data-curiosity-english.js` 401 KB）。
+- PWA：`manifest.webmanifest` + `sw.js`（缓存名 `duwu-playground-v7.0`），支持 iPad Safari「添加到主屏幕」离线秒开；`.mp4` 与 Range 请求永不走缓存（sw.js 注释）。
 - 后端：`deploy/voice_server.py`，Python 3 标准库单文件、零依赖（653 行），监听 `127.0.0.1:8798`，由 systemd 单元 `duwu-voice.service` 常驻；提供录音云同步、豆包 TTS 代理缓存、LLM 聊天三个接口。
 - 本机形态：`python3 -m http.server 8892` 静态站（无后端；TTS/聊天/录音接口在本机 8892 下不可用）。
 
@@ -31,7 +31,9 @@
 | `js/data-real-videos.js` | 全书 99/99 实景与写实生态动态短片清单（区分 `camera` 野外/实验真实实拍 39 条与 `realistic_scene` 写实动态还原 60 条） |
 | `js/data-curiosity-english.js` | 99 卡「生活中的真实实例」故事与写实插画 + 「十万个为什么」3连问（297 故事）+ 实况解说 + 眼力侦探题 + 英文名/297科学词卡/双语情景句 |
 | `js/data-card-interactions.js` | 99 卡专属实验/答题/传送内容（193 KB，11-14 新增） |
-| `js/upgrade1~5-*.js` | 五大进阶模块：生态寻宝、分子手术、王牌对战、配音间、实况与生活实例伴读及英语点读跟读/闯关擂台 |
+| `js/upgrade1~5-*.js` | 五大进阶模块：生态寻宝、分子手术、王牌对战（含卡面英文名）、配音间、实况与生活实例伴读及英语点读/拼词/听句填词/跟读 |
+| `js/upgrade6-english-playground.js` | 第 5 站「🇬🇧 毒物英语游乐场」6 大游戏：字母积木拼词屋、3D 双语翻翻乐、英文造句小火车、听音戳泡泡、英语开口小舞台、251 词科学词典 |
+| `js/upgrade7-knowledge-games.js` | 第 4 站知识闯关（Venom vs Poison 分类实验室、16 关生活安全大冒险、95 宗神秘毒物三步破案、24 关真假科学大法官）+ 🏅 小馆长科学英语护照（每日任务 & 16 枚勋章） |
 | `js/doubao-tts.js` / `js/ai-companion.js` | TTS 客户端 / AI 语音伴侣客户端（调 `./api/tts`、`./api/chat`） |
 | `js/data-tts-manifest.js` | 1054 条预生成豆包 TTS 音频清单，配合 `assets/tts/` 实现 0ms 播放 |
 | `sw.js` | Service Worker：CORE_SHELL 清单 + 缓存名版本号，改 js/css 必改这里 |

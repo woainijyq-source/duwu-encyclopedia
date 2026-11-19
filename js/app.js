@@ -152,6 +152,18 @@
     unlockedCuriosities: [],
     wonSpotChallenges: [],
     wonEnShadowing: [],
+    masteredWords: [],
+    wonCardSpelling: [],
+    sentencesBuilt: [],
+    memoryWins: 0,
+    bubblePops: 0,
+    speakStageCount: 0,
+    sortedCorrect: [],
+    safetyWon: [],
+    detectiveCasesWon: [],
+    mythWon: [],
+    dailyProgress: null,
+    pkMode: "zh", // 'zh' | 'en'
     pkStreak: 0,
     stars: 0,
 
@@ -182,10 +194,17 @@
   let ecoSandbox = null;
   let cardBattler = null;
   let liveEnArena = null;
+  let englishPlayground = null;
+  let toxClassifyLab = null;
+  let safetyArena = null;
+  let mysteryArena = null;
+  let mythArena = null;
+  let passportModal = null;
   let voiceStudio = null;
   let aiCompanion = null;
   let currentOpenCard = null;
   let unsubscribeModalTts = null;
+  const sessionOpenedCards = new Set();
 
   function loadState() {
     try {
@@ -200,6 +219,17 @@
       state.unlockedCuriosities = s.unlockedCuriosities || [];
       state.wonSpotChallenges = s.wonSpotChallenges || [];
       state.wonEnShadowing = s.wonEnShadowing || [];
+      state.masteredWords = s.masteredWords || [];
+      state.wonCardSpelling = s.wonCardSpelling || [];
+      state.sentencesBuilt = s.sentencesBuilt || [];
+      state.memoryWins = s.memoryWins || 0;
+      state.bubblePops = s.bubblePops || 0;
+      state.speakStageCount = s.speakStageCount || 0;
+      state.sortedCorrect = s.sortedCorrect || [];
+      state.safetyWon = s.safetyWon || [];
+      state.detectiveCasesWon = s.detectiveCasesWon || [];
+      state.mythWon = s.mythWon || [];
+      state.dailyProgress = s.dailyProgress || null;
       state.stars = s.stars || 0;
       if (s.theme) state.theme = s.theme;
     } catch (_) {}
@@ -216,16 +246,38 @@
         unlockedCuriosities: state.unlockedCuriosities,
         wonSpotChallenges: state.wonSpotChallenges,
         wonEnShadowing: state.wonEnShadowing,
+        masteredWords: state.masteredWords,
+        wonCardSpelling: state.wonCardSpelling,
+        sentencesBuilt: state.sentencesBuilt,
+        memoryWins: state.memoryWins,
+        bubblePops: state.bubblePops,
+        speakStageCount: state.speakStageCount,
+        sortedCorrect: state.sortedCorrect,
+        safetyWon: state.safetyWon,
+        detectiveCasesWon: state.detectiveCasesWon,
+        mythWon: state.mythWon,
+        dailyProgress: state.dailyProgress,
         stars: state.stars,
         theme: state.theme
       }));
     } catch (_) {}
-    const el = document.getElementById("starCounter");
-    if (el) el.textContent = `⭐ ${state.stars}`;
+    if (passportModal) {
+      passportModal.syncTopBadge();
+    } else {
+      const el = document.getElementById("starCounter");
+      if (el) el.innerHTML = `⭐ ${state.stars} <span class="passport-chip-tag">🏅护照</span>`;
+    }
   }
 
   function addStars(n) {
     state.stars += n;
+    saveState();
+  }
+
+  function trackMission(field, delta) {
+    if (!window.KnowledgeGamesModule || !window.KnowledgeGamesModule.ensureDailyState) return;
+    const dp = window.KnowledgeGamesModule.ensureDailyState(state);
+    dp[field] = (dp[field] || 0) + (delta || 1);
     saveState();
   }
 
@@ -286,7 +338,14 @@
   // ==========================================================================
   function initTopBar() {
     if (state.theme === "light") document.documentElement.setAttribute("data-theme", "light");
-    document.getElementById("starCounter").textContent = `⭐ ${state.stars}`;
+    const starBtn = document.getElementById("starCounter");
+    if (starBtn) {
+      starBtn.innerHTML = `⭐ ${state.stars} <span class="passport-chip-tag">🏅护照</span>`;
+      starBtn.addEventListener("click", () => {
+        if (window.SFX) window.SFX.pop();
+        if (passportModal) passportModal.open();
+      });
+    }
 
     document.querySelectorAll(".stage-tab").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -363,6 +422,16 @@
     document.querySelectorAll(".stage-view").forEach((v) => {
       v.classList.toggle("active", v.id === `stage-${st}`);
     });
+    if (st === "english" && englishPlayground) {
+      if (!englishPlayground.wbWord) {
+        englishPlayground.init();
+      } else {
+        englishPlayground._syncMasteredCounter();
+        if (englishPlayground.subGame === "wordbook") {
+          englishPlayground.renderSubBody();
+        }
+      }
+    }
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -549,6 +618,10 @@
       state.litCards.push(id);
       addStars(1);
       renderPhotoDex();
+    }
+    if (!sessionOpenedCards.has(id)) {
+      sessionOpenedCards.add(id);
+      trackMission("cards", 1);
     }
 
     const photo = getPhoto(id);
@@ -857,6 +930,7 @@
               if (firstTimeWin) {
                 state.cardQuizWon.push(item.id);
                 addStars(2);
+                trackMission("knowledge", 1);
                 btnQuiz.classList.add("won");
                 const subTxt = document.getElementById("cardQuizSubText");
                 if (subTxt) {
@@ -883,7 +957,7 @@
               optBtn.classList.add("picked-wrong");
               if (window.SFX) window.SFX.bonk();
               fbBox.innerHTML = `
-                <div style="font-size:0.85rem;font-weight:800;color:#fbbf24;padding:6px 4px;">
+                <div style="font-size:0.85rem;font-weight:800;color:var(--c-warn-text);padding:6px 4px;">
                   💡 哎呀差一点点！再仔细想想，点另一个选项试试看吧～
                 </div>
               `;
@@ -929,7 +1003,7 @@
       });
     };
 
-    // 挂载 v5.0 实况短片解说、十万个为什么与趣味英语小课堂
+    // 挂载 v5.0/v7.0 实况短片解说、十万个为什么与趣味英语小课堂（含拼词闯关）
     if (window.CuriosityEnglishModule && window.CuriosityEnglishModule.mountCardExtensions) {
       window.CuriosityEnglishModule.mountCardExtensions({
         item,
@@ -937,6 +1011,7 @@
         speak,
         renderClauses,
         addStars,
+        trackMission,
         state,
         saveState,
         stopVoiceStudio: () => {
@@ -1408,7 +1483,7 @@
           <div class="tummy-bar-track">
             <div class="tummy-bar-fill" style="width:${humanPct}%;background:#4ade80;"></div>
           </div>
-          <div style="font-weight:800;color:#4ade80;">
+          <div style="font-weight:800;color:var(--c-ok-text);">
             ${n === 0 ? "准备开吃！" : "✅ 可可碱很快被酶拆掉排出，开心又安全！"}
           </div>
         </div>
@@ -1441,7 +1516,7 @@
           <div class="tummy-bar-track">
             <div class="tummy-bar-fill" style="width:12%;background:#4ade80;"></div>
           </div>
-          <div style="font-weight:800;color:#4ade80;">✅ 没有乙醇进来，一点乙醛都没有，平安无事！</div>
+          <div style="font-weight:800;color:var(--c-ok-text);">✅ 没有乙醇进来，一点乙醛都没有，平安无事！</div>
         </div>
 
         <div class="critter-box" style="border-color:${beer ? "#fb7185" : "var(--border-light)"};">
@@ -1556,7 +1631,7 @@
         const hint = document.getElementById("dialZoneHint");
         const fireBtn = document.getElementById("btnFireCapsule");
         if (v >= 28 && v <= 62) {
-          hint.innerHTML = "✅ <span style='color:#4ade80'>进入黄金微克治疗窗！快发射救命胶囊！</span>";
+          hint.innerHTML = "✅ <span style='color:var(--c-ok-text)'>进入黄金微克治疗窗！快发射救命胶囊！</span>";
           fireBtn.disabled = false;
           fireBtn.style.opacity = "1";
         } else if (v < 28) {
@@ -1564,7 +1639,7 @@
           fireBtn.disabled = true;
           fireBtn.style.opacity = "0.45";
         } else {
-          hint.innerHTML = "☠️ <span style='color:#fb7185'>剂量太高变回毒药啦！快往左调小一点！</span>";
+          hint.innerHTML = "☠️ <span style='color:var(--c-err-text)'>剂量太高变回毒药啦！快往左调小一点！</span>";
           fireBtn.disabled = true;
           fireBtn.style.opacity = "0.45";
         }
@@ -1619,7 +1694,7 @@
       );
     }
 
-    // 初始化 v5.0 实况观察侦探 & 毒物英语大闯关
+    // 初始化 v5.0/v7.0 实况观察侦探 & 毒物英语听力/填空大闯关
     if (window.CuriosityEnglishModule && window.CuriosityEnglishModule.LiveEnglishArena) {
       liveEnArena = new window.CuriosityEnglishModule.LiveEnglishArena(
         document.getElementById("liveEnArenaMount"),
@@ -1628,9 +1703,57 @@
           getPhoto,
           speak,
           onWinStars: (n) => addStars(n),
-          onOpenCard: (aid) => openSuperCard(aid)
+          onOpenCard: (aid) => openSuperCard(aid),
+          onTrackMission: (f, d) => trackMission(f, d),
+          onMasterWord: (wordKey) => {
+            const k = String(wordKey || "").trim().toLowerCase();
+            if (k && !state.masteredWords.includes(k)) {
+              state.masteredWords.push(k);
+              saveState();
+            }
+          }
         }
       );
+    }
+
+    const sharedBridge = {
+      state,
+      saveState,
+      addStars,
+      trackMission,
+      ruby,
+      getPhoto,
+      speak,
+      openSuperCard,
+      switchStage
+    };
+
+    // 初始化 v7.0 游戏 5（Venom vs Poison 分类实验室）、游戏 6（16关生活安全大冒险）、游戏 7（三步破案）、游戏 8（真假大法官）
+    if (window.KnowledgeGamesModule) {
+      if (window.KnowledgeGamesModule.ToxClassificationLab) {
+        toxClassifyLab = new window.KnowledgeGamesModule.ToxClassificationLab(
+          document.getElementById("toxClassifyMount"),
+          sharedBridge
+        );
+      }
+      if (window.KnowledgeGamesModule.SafetyAdventureArena) {
+        safetyArena = new window.KnowledgeGamesModule.SafetyAdventureArena(
+          document.getElementById("safetyArenaMount"),
+          sharedBridge
+        );
+      }
+      if (window.KnowledgeGamesModule.MysteryDetectiveArena) {
+        mysteryArena = new window.KnowledgeGamesModule.MysteryDetectiveArena(
+          document.getElementById("mysteryCaseMount"),
+          sharedBridge
+        );
+      }
+      if (window.KnowledgeGamesModule.ScienceMythBusterArena) {
+        mythArena = new window.KnowledgeGamesModule.ScienceMythBusterArena(
+          document.getElementById("mythBusterMount"),
+          sharedBridge
+        );
+      }
     }
 
     document.querySelectorAll(".det-sub-btn").forEach((btn) => {
@@ -1646,11 +1769,31 @@
         document.getElementById("detFlashPanel").style.display = dsub === "flashpk" ? "block" : "none";
         const liveEnPanel = document.getElementById("detLiveEnPanel");
         if (liveEnPanel) liveEnPanel.style.display = dsub === "liveen" ? "block" : "none";
+        const clsPanel = document.getElementById("detClassifyPanel");
+        if (clsPanel) clsPanel.style.display = dsub === "classify" ? "block" : "none";
+        const sfPanel = document.getElementById("detSafetyPanel");
+        if (sfPanel) sfPanel.style.display = dsub === "safety" ? "block" : "none";
+        const mysPanel = document.getElementById("detMysteryPanel");
+        if (mysPanel) mysPanel.style.display = dsub === "mystery" ? "block" : "none";
+        const mythPanel = document.getElementById("detMythPanel");
+        if (mythPanel) mythPanel.style.display = dsub === "myths" ? "block" : "none";
         if (dsub === "flashpk" && !state.pkAnswer) nextFlashcardPK();
         if (dsub === "liveen" && liveEnArena) {
           if (!liveEnArena.currentAnswer) liveEnArena.init();
         } else if (liveEnArena) {
           liveEnArena.stopMedia();
+        }
+        if (dsub === "classify" && toxClassifyLab && !toxClassifyLab.currentItem) {
+          toxClassifyLab.init();
+        }
+        if (dsub === "safety" && safetyArena) {
+          safetyArena.init();
+        }
+        if (dsub === "mystery" && mysteryArena && !mysteryArena.caseTarget) {
+          mysteryArena.init();
+        }
+        if (dsub === "myths" && mythArena) {
+          mythArena.init();
         }
       });
     });
@@ -1739,6 +1882,7 @@
         if (!wasAlreadyFound) {
           state.foundHunt.push(key);
           addStars(2);
+          trackMission("knowledge", 1);
           window.SFX.chime();
         } else {
           // 再次点击已找到的圈圈，直接打开它的 3D 分子档案卡！
@@ -1752,15 +1896,30 @@
           ? `👑 本关 ${curScene.targets.length} 处全找齐啦！（再点一次绿色圈圈还能看它的 3D 分子闪卡哦！）`
           : target.tip;
         const huntToastEl = document.getElementById("huntToast");
-        huntToastEl.innerHTML = renderClauses(msg);
+        const tCe = (window.CURIOSITY_ENGLISH_DATA && window.CURIOSITY_ENGLISH_DATA[target.archiveId]) || null;
+        const enChipHtml =
+          tCe && tCe.enName
+            ? ` <button type="button" class="mini-btn on" id="btnHuntSpeakEn" style="margin-left:8px;padding:3px 10px;min-height:28px;font-size:0.78rem;vertical-align:middle;">🇬🇧 🔊 ${tCe.enName}</button>`
+            : "";
+        huntToastEl.innerHTML = `${renderClauses(msg)}${enChipHtml}`;
+        const btnHuntEn = document.getElementById("btnHuntSpeakEn");
+        if (btnHuntEn && tCe && tCe.enName) {
+          btnHuntEn.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            if (window.DoubaoTTS && window.DoubaoTTS.speakEnglish) {
+              window.DoubaoTTS.speakEnglish(tCe.enName, { repeat: 2 });
+            }
+          });
+        }
         speak(target.tip, { scopeEl: huntToastEl, playTapSfx: false });
       });
     });
   }
 
-  // 看真身照片 · 抢答大百科目录 PK
+  // 看真身照片 · 抢答大百科目录 / 英文真名 PK
   function nextFlashcardPK() {
-    const pool = window.CATALOG_DATA.filter((x) => x.chapter !== "ch0" && getPhoto(x.id));
+    const ceMap = window.CURIOSITY_ENGLISH_DATA || {};
+    const pool = window.CATALOG_DATA.filter((x) => x.chapter !== "ch0" && getPhoto(x.id) && (state.pkMode !== "en" || (ceMap[x.id] && ceMap[x.id].enName)));
     const ans = pool[Math.floor(Math.random() * pool.length)];
     const others = pool.filter((x) => x.id !== ans.id).sort(() => Math.random() - 0.5).slice(0, 3);
     state.pkAnswer = ans;
@@ -1770,56 +1929,104 @@
 
   function renderFlashcardPK() {
     const ans = state.pkAnswer;
+    const ceMap = window.CURIOSITY_ENGLISH_DATA || {};
+    const ansCe = ceMap[ans.id] || {};
+    const isEnPK = state.pkMode === "en";
     const arena = document.getElementById("flashcardArena");
     arena.innerHTML = `
       <div>
         <div class="mystery-photo-frame">
           <img src="${getPhoto(ans.id)}" alt="猜猜我是谁" />
-          <div style="position:absolute;top:12px;left:12px;background:rgba(15,23,42,0.85);color:#fbbf24;padding:6px 14px;border-radius:99px;font-weight:900;">
+          <div id="pkStreakBadge" style="position:absolute;top:12px;left:12px;background:rgba(15,23,42,0.85);color:#fbbf24;padding:6px 14px;border-radius:99px;font-weight:900;">
             🔥 连对纪录：${state.pkStreak}
           </div>
           <div style="position:absolute;bottom:12px;left:12px;background:rgba(15,23,42,0.85);color:#fff;padding:6px 14px;border-radius:99px;font-weight:800;font-size:0.88rem;">
-            提示：它在原书【${ans.code}】！
+            ${isEnPK ? `提示：中文叫【${ans.name}】 · ${ans.code}` : `提示：它在原书【${ans.code}】！`}
           </div>
         </div>
       </div>
 
       <div>
-        <h3 style="margin:0 0 14px;font-size:1.35rem;">📸 看真身认毒物：照片里是谁？</h3>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+          <button type="button" class="scene-pill ${!isEnPK ? "active" : ""}" data-pkmode="zh">📖 模式A：抢答中文与目录</button>
+          <button type="button" class="scene-pill ${isEnPK ? "active" : ""}" data-pkmode="en">🇬🇧 模式B：看图抢英文真名</button>
+        </div>
+        <h3 style="margin:0 0 14px;font-size:1.3rem;">
+          ${isEnPK ? "🇬🇧 看高清真身：它的英文名字是哪一个？" : "📸 看真身认毒物：照片里是谁？"}
+        </h3>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-          ${state.pkChoices.map((c) => `
-            <button class="venom-bottle pk-choice-btn" data-id="${c.id}" style="padding:16px 12px;font-size:1.08rem;">
-              <div style="font-size:1.7rem;margin-bottom:4px;">${c.emoji}</div>
-              <div>${ruby(c.name)}</div>
-              <div style="font-size:0.76rem;color:var(--text-muted);margin-top:4px;">${c.code}</div>
+          ${state.pkChoices.map((c) => {
+            const cCe = ceMap[c.id] || {};
+            return `
+            <button class="venom-bottle pk-choice-btn" data-id="${c.id}" style="padding:16px 12px;font-size:1.05rem;">
+              <div style="font-size:1.65rem;margin-bottom:4px;">${c.emoji}</div>
+              ${
+                isEnPK
+                  ? `<div style="font-weight:900;color:var(--c-teal-text);">${cCe.enName || c.name}</div>
+                     <div style="font-size:0.75rem;color:var(--text-muted);margin-top:3px;">${cCe.enPron || c.code}</div>`
+                  : `<div>${ruby(c.name)}</div>
+                     <div style="font-size:0.76rem;color:var(--text-muted);margin-top:4px;">${c.code}</div>`
+              }
             </button>
-          `).join("")}
+          `;
+          }).join("")}
         </div>
         <div id="pkFeedback" style="margin-top:14px;min-height:48px;"></div>
       </div>
     `;
 
+    let pkAnswered = false;
+
+    arena.querySelectorAll("[data-pkmode]").forEach((mb) => {
+      mb.addEventListener("click", () => {
+        window.SFX.pop();
+        state.pkMode = mb.getAttribute("data-pkmode");
+        nextFlashcardPK();
+      });
+    });
+
     arena.querySelectorAll(".pk-choice-btn").forEach((btn) => {
       btn.addEventListener("click", () => {
+        if (pkAnswered) return;
         const picked = btn.getAttribute("data-id");
         const fb = document.getElementById("pkFeedback");
+        const streakBadge = document.getElementById("pkStreakBadge");
         if (picked === ans.id) {
+          pkAnswered = true;
           btn.classList.add("picked-right");
           state.pkStreak++;
+          if (streakBadge) streakBadge.textContent = `🔥 连对纪录：${state.pkStreak}`;
           addStars(2);
+          trackMission(isEnPK ? "words" : "knowledge", 1);
           window.SFX.chime();
+          if (window.PlaygroundFX) window.PlaygroundFX.celebrate(btn);
+          if (ansCe.enName && window.DoubaoTTS && window.DoubaoTTS.speakEnglish) {
+            window.DoubaoTTS.speakEnglish(ansCe.enName, { repeat: isEnPK ? 2 : 1, playTapSfx: false });
+          }
           fb.innerHTML = `
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(74,222,128,0.18);border:2px solid #4ade80;padding:10px 16px;border-radius:16px;font-weight:800;">
-              <span>🎉 秒答正确！正是 ${ruby(ans.name)}！</span>
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:rgba(74,222,128,0.18);border:2px solid #4ade80;padding:10px 16px;border-radius:16px;font-weight:800;">
+              <div>
+                🎉 秒答正确！正是 ${ruby(ans.name)}！
+                ${ansCe.enName ? `<button type="button" class="mini-btn on" id="btnPkSpeakEn" style="margin-left:6px;padding:3px 10px;min-height:28px;font-size:0.78rem;">🇬🇧 🔊 ${ansCe.enName}</button>` : ""}
+              </div>
               <button class="big-action-btn" id="btnNextPK" style="padding:8px 16px;min-height:38px;font-size:0.9rem;">下一张 ➜</button>
             </div>
           `;
+          const bSpk = document.getElementById("btnPkSpeakEn");
+          if (bSpk && ansCe.enName) {
+            bSpk.addEventListener("click", () => {
+              if (window.DoubaoTTS && window.DoubaoTTS.speakEnglish) {
+                window.DoubaoTTS.speakEnglish(ansCe.enName, { repeat: 2 });
+              }
+            });
+          }
           document.getElementById("btnNextPK").addEventListener("click", nextFlashcardPK);
         } else {
           btn.classList.add("picked-wrong");
           state.pkStreak = 0;
+          if (streakBadge) streakBadge.textContent = `🔥 连对纪录：0`;
           window.SFX.bonk();
-          fb.innerHTML = `<div style="color:#fb7185;font-weight:800;padding:8px;">🙈 哎呀猜错啦！瞄一眼左下角的章节号【${ans.code}】再选！</div>`;
+          fb.innerHTML = `<div style="color:var(--c-err-text);font-weight:800;padding:8px;">🙈 哎呀猜错啦！瞄一眼左下角的提示再选！</div>`;
         }
       });
     });
@@ -1852,6 +2059,55 @@
     initBioLabStage();
     initPharmacyStage();
     initDetectiveStage();
+
+    // 初始化 v7.0 第 5 站（毒物英语游乐场）与小馆长科学英语护照
+    const appBridge = {
+      state,
+      saveState,
+      addStars,
+      trackMission,
+      ruby,
+      getPhoto,
+      speak,
+      openSuperCard,
+      switchStage
+    };
+    if (window.EnglishPlaygroundModule && window.EnglishPlaygroundModule.EnglishPlayground) {
+      englishPlayground = new window.EnglishPlaygroundModule.EnglishPlayground(
+        document.getElementById("englishPlaygroundMount"),
+        appBridge
+      );
+    }
+    if (window.KnowledgeGamesModule && window.KnowledgeGamesModule.ExplorerPassportModal) {
+      passportModal = new window.KnowledgeGamesModule.ExplorerPassportModal(appBridge);
+      passportModal.syncTopBadge();
+    }
+
+    // 全局 Escape 键优雅关闭当前最顶层弹窗
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      if (aiCompanion && aiCompanion.isOpen) {
+        aiCompanion.close();
+        return;
+      }
+      const pp = document.getElementById("passportModalBackdrop");
+      if (pp && pp.classList.contains("open") && passportModal) {
+        passportModal.close();
+        return;
+      }
+      const iv = document.getElementById("introVideoModal");
+      if (iv && iv.classList.contains("open")) {
+        const b = document.getElementById("btnCloseIntroVideo");
+        if (b) b.click();
+        return;
+      }
+      const sc = document.getElementById("superCardModal");
+      if (sc && sc.classList.contains("open")) {
+        const b = document.getElementById("btnCloseSuperModal");
+        if (b) b.click();
+      }
+    });
+
     registerPWA();
   });
 })();
