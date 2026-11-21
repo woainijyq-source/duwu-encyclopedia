@@ -25,21 +25,29 @@
       this.history = []; // [{ role: "user"|"assistant", content: "..." }]
       this.activeCard = null;
       this.reqSeq = 0;
-      this.chatLang = "zh"; // 'zh' | 'en'
+      this.chatLang = window.isEn && window.isEn() ? "en" : "zh"; // v8.0 default follows global EN/ZH mode
 
       this._initDOM();
       this._initSpeechRecognition();
+      window.addEventListener("duwu:langchange", () => {
+        const en = window.isEn && window.isEn();
+        this.chatLang = en ? "en" : "zh";
+        const fabTxt = document.querySelector("#fabAiCompanion .ai-fab-text");
+        if (fabTxt) fabTxt.textContent = en ? "Ask Frog AI" : "随时互动";
+        if (typeof this._syncLangModeUI === "function") this._syncLangModeUI();
+      });
     }
 
     _initDOM() {
-      // 1. 右下角全局常驻【🎤 随时互动】悬浮按钮
+      const en = window.isEn && window.isEn();
+      // 1. 右下角全局常驻【🐸 Ask Frog AI / 🎤 随时互动】悬浮按钮（配箭毒蛙小博士头像！）
       const fab = document.createElement("button");
       fab.id = "fabAiCompanion";
       fab.className = "ai-fab-btn";
       fab.type = "button";
       fab.innerHTML = `
-        <span class="ai-fab-icon">🎤</span>
-        <span class="ai-fab-text">随时互动</span>
+        <img src="assets/art/mascot_happy.jpg" alt="Professor Dart" class="ai-fab-mascot" />
+        <span class="ai-fab-text">${en ? "Ask Frog AI" : "随时互动"}</span>
       `;
       fab.addEventListener("click", () => {
         if (window.SFX) window.SFX.pop();

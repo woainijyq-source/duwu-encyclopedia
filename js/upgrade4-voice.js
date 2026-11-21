@@ -308,9 +308,16 @@
         const hasRec = clips.length > 0;
         const anySynced = clips.some((c) => c.synced);
 
+        const en = window.isEn ? window.isEn() : true;
+        const enCard = window.DUWU_I18N ? window.DUWU_I18N.getCardEn(item.id) : null;
+        const dispName = en && enCard ? enCard.enName : item.name;
         const defaultSub = hasRec
-          ? `${anySynced ? "☁️ 已同步云端 · " : "💾 已存本机 · "}长按右侧按钮可继续录新配音（已录 ${clips.length} 条）`
-          : `💡 按住右侧按钮不放开始讲「${item.name}」，松开手指即完成配音！`;
+          ? (en
+              ? `${anySynced ? "☁️ Synced · " : "💾 Saved · "}Hold button to record another clip (${clips.length} saved)`
+              : `${anySynced ? "☁️ 已同步云端 · " : "💾 已存本机 · "}长按右侧按钮可继续录新配音（已录 ${clips.length} 条）`)
+          : (en
+              ? `💡 Hold the mic button to record your own science voice note for "${dispName}"!`
+              : `💡 按住右侧按钮不放开始讲「${item.name}」，松开手指即完成配音！`);
 
         mountEl.innerHTML = `
           <div class="curator-voice-card ${hasRec ? "voiced" : ""}" id="curatorVoiceCardBox">
@@ -319,7 +326,9 @@
                 <span style="font-size:1.5rem;" id="voiceStateIcon">${hasRec ? "👑" : "🎙️"}</span>
                 <div>
                   <div style="font-weight:900;font-size:0.95rem;" id="voiceStateTitle">
-                    ${hasRec ? `小馆长已配音 · 共 ${clips.length} 条` : "我是毒物馆小馆长 · 按住录解说！"}
+                    ${hasRec
+                      ? (en ? `Junior Curator Recorded · ${clips.length} clip(s)` : `小馆长已配音 · 共 ${clips.length} 条`)
+                      : (en ? "Junior Curator Studio · Hold to Record!" : "我是毒物馆小馆长 · 按住录解说！")}
                   </div>
                   <div style="font-size:0.76rem;color:var(--text-muted);" id="voiceStatusSub">
                     ${statusMsg || defaultSub}
@@ -331,12 +340,12 @@
                 ${
                   clips.length >= 2
                     ? `<button type="button" class="voice-btn play ${this.isPlayingAll ? "playing" : ""}" id="btnVoicePlayAll">
-                         ${this.isPlayingAll ? "⏹️ 停止连播" : `🎵 连播全部 (${clips.length})`}
+                         ${this.isPlayingAll ? (en ? "⏹️ Stop All" : "⏹️ 停止连播") : (en ? `🎵 Play All (${clips.length})` : `🎵 连播全部 (${clips.length})`)}
                        </button>`
                     : ""
                 }
                 <button type="button" class="voice-btn record hold-to-record-btn" id="btnVoiceRec">
-                  ${hasRec ? "🎙️ 按住再录一条" : "🎙️ 按住说话配音"}
+                  ${hasRec ? (en ? "🎙️ Hold to Add Clip" : "🎙️ 按住再录一条") : (en ? "🎙️ Hold to Record" : "🎙️ 按住说话配音")}
                 </button>
               </div>
             </div>

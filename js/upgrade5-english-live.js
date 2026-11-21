@@ -247,24 +247,36 @@
     if (!Array.isArray(state.wonCardSpelling)) state.wonCardSpelling = [];
 
     const extra = (window.CURIOSITY_ENGLISH_DATA && window.CURIOSITY_ENGLISH_DATA[item.id]) || null;
+    const enCard = window.DUWU_I18N ? window.DUWU_I18N.getCardEn(item.id) : null;
+    const en = window.isEn ? window.isEn() : true;
+    const flip = (txt) => (window.FlipReader ? window.FlipReader.render(txt, { cardId: item.id }) : esc(txt));
+    const speakTextSmart = (txt, spOpts) => {
+      if (en && window.DoubaoTTS && window.DoubaoTTS.speakEnglishNarration) {
+        window.DoubaoTTS.speakEnglishNarration(txt, spOpts);
+      } else {
+        speak(txt, spOpts);
+      }
+    };
     const bi1 = (window.BILINGUAL_NOTES && window.BILINGUAL_NOTES[item.id]) || null;
     const realVid = (window.REAL_VIDEOS && window.REAL_VIDEOS[item.id]) || null;
 
     // 1. 挂载实况短片解说与观察互动栏（位于左侧视图切换下方）
     const liveMount = document.getElementById("modalRealVideoCompanion");
     if (liveMount) {
-      if (realVid || (extra && extra.liveCommentary)) {
+      const liveText = en && enCard && enCard.liveCommentary ? enCard.liveCommentary : (extra && extra.liveCommentary) || "";
+      const spotObj = en && enCard && enCard.spotChallenge ? enCard.spotChallenge : (extra && extra.spotChallenge) || null;
+      if (realVid || liveText) {
         const spotDone = state.wonSpotChallenges.includes(item.id);
         const isRealisticScene = Boolean(realVid && realVid.kind === "realistic_scene");
-        const badgeLabel = realVid
-          ? isRealisticScene
-            ? "🎨 写实动态还原"
-            : realVid.exact
-            ? "🎥 物种真身实况短片"
-            : "🎥 实景近亲/实验实拍"
-          : "🎙️ 现场观察导览";
+        const badgeLabel = en
+          ? (realVid ? (isRealisticScene ? "🎨 Illustrated Scene" : "🎥 Real Nature Clip") : "🎙️ Science Guide")
+          : (realVid
+              ? isRealisticScene ? "🎨 写实动态还原" : realVid.exact ? "🎥 物种真身实况短片" : "🎥 实景近亲/实验实拍"
+              : "🎙️ 现场观察导览");
         const tagClass = isRealisticScene ? "realistic_scene" : realVid && realVid.exact ? "exact" : "related";
-        const subTitle = realVid && realVid.label ? realVid.label : `${item.name}生态观察`;
+        const subTitle = en
+          ? `${(enCard && enCard.enName) || (extra && extra.enName) || item.name} Discovery`
+          : (realVid && realVid.label ? realVid.label : `${item.name}生态观察`);
 
         liveMount.style.display = "block";
         liveMount.innerHTML = `
@@ -272,19 +284,19 @@
             <div class="rv-header-row">
               <div class="rv-badge-group">
                 <span class="rv-authentic-tag ${tagClass}">${esc(badgeLabel)}</span>
-                <span class="rv-sub-label">${ruby(subTitle)}</span>
+                <span class="rv-sub-label">${en ? esc(subTitle) : ruby(subTitle)}</span>
               </div>
               <div class="rv-action-btns">
-                <button type="button" class="rv-mini-action" id="btnJumpStoryVideo" title="观看写实插画+姐姐全程配音的生活实例短片">🎬 姐姐配音剧场</button>
+                <button type="button" class="rv-mini-action" id="btnJumpStoryVideo">${en ? "🎬 Story Video" : "🎬 姐姐配音剧场"}</button>
                 ${
-                  extra && extra.liveCommentary
-                    ? `<button type="button" class="rv-mini-action" id="btnPlayLiveCommentary">🎙️ 边看边听解说</button>`
+                  liveText
+                    ? `<button type="button" class="rv-mini-action" id="btnPlayLiveCommentary">${en ? "🎙️ Watch & Listen" : "🎙️ 边看边听解说"}</button>`
                     : ""
                 }
                 ${
-                  extra && extra.spotChallenge
+                  spotObj
                     ? `<button type="button" class="rv-mini-action spot-btn ${spotDone ? "done" : ""}" id="btnOpenSpotChallenge">
-                         ${spotDone ? "✅ 眼力已通关" : "👀 观察小侦探 (+2⭐)"}
+                         ${spotDone ? (en ? "✅ Spotted!" : "✅ 眼力已通关") : (en ? "👀 Detective Quiz (+2⭐)" : "👀 观察小侦探 (+2⭐)")}
                        </button>`
                     : ""
                 }
@@ -306,11 +318,10 @@
         }
 
         const btnLiveComm = document.getElementById("btnPlayLiveCommentary");
-        if (btnLiveComm && extra && extra.liveCommentary) {
+        if (btnLiveComm && liveText) {
           btnLiveComm.addEventListener("click", () => {
             stopVoiceStudio();
             shadowingEngine.stopAll();
-            // 如果有真实实况视频，自动切到真实实况画面并静音循环播放，实现BBC纪录片同步配音感！
             if (realVid && typeof opts.switchToRealVideo === "function") {
               opts.switchToRealVideo({ muteForNarration: true });
             }
@@ -318,33 +329,34 @@
             if (!sBox) return;
             sBox.style.display = "block";
             sBox.innerHTML = `
-              <div class="kid-voice-bubble tts-reading-scope rv-commentary-bubble" title="点击暂停或重播实况解说">
+              <div class="kid-voice-bubble tts-reading-scope rv-commentary-bubble">
                 <div class="tts-toy-status"></div>
-                <div class="tts-clauses-body">🎬 ${renderClauses(extra.liveCommentary)}</div>
+                <div class="tts-clauses-body">🎬 ${en ? flip(liveText) : renderClauses(liveText)}</div>
               </div>
             `;
             const bubble = sBox.querySelector(".kid-voice-bubble");
             if (bubble) {
-              bubble.addEventListener("click", () => {
-                speak(extra.liveCommentary, {
+              bubble.addEventListener("click", (e) => {
+                if (e.target.closest(".fw-card")) return;
+                speakTextSmart(liveText, {
                   toggleIfPlaying: true,
                   scopeEl: bubble,
                   statusMountEl: sBox.querySelector(".tts-toy-status")
                 });
               });
             }
-            speak(extra.liveCommentary, {
+            speakTextSmart(liveText, {
               toggleIfPlaying: true,
               scopeEl: bubble || sBox,
               triggerBtn: btnLiveComm,
               statusMountEl: sBox.querySelector(".tts-toy-status"),
-              defaultBtnHTML: "🎙️ 边看边听解说"
+              defaultBtnHTML: en ? "🎙️ Watch & Listen" : "🎙️ 边看边听解说"
             });
           });
         }
 
         const btnSpot = document.getElementById("btnOpenSpotChallenge");
-        if (btnSpot && extra && extra.spotChallenge) {
+        if (btnSpot && spotObj) {
           btnSpot.addEventListener("click", () => {
             if (window.SFX) window.SFX.pop();
             stopVoiceStudio();
@@ -354,20 +366,20 @@
               cBox.style.display = "none";
               return;
             }
-            const sc = extra.spotChallenge;
+            const sc = spotObj;
             cBox.style.display = "block";
             cBox.innerHTML = `
               <div class="card-quiz-box spot-detective-box">
                 <div class="card-quiz-question tts-reading-scope" id="spotQuestionScope">
                   <div class="tts-toy-status"></div>
-                  <div class="tts-clauses-body">${renderClauses(sc.q)}</div>
+                  <div class="tts-clauses-body">${en ? flip(sc.q) : renderClauses(sc.q)}</div>
                 </div>
                 <div class="card-quiz-options">
                   ${sc.opts
                     .map(
                       (optTxt, idx) => `
                     <button type="button" class="card-quiz-opt-btn" data-sright="${idx === sc.ans ? "1" : "0"}">
-                      ${idx === 0 ? "🔍 A." : "🔍 B."} ${ruby(optTxt)}
+                      ${idx === 0 ? "🔍 A." : "🔍 B."} ${en ? esc(optTxt) : ruby(optTxt)}
                     </button>
                   `
                     )
@@ -379,8 +391,9 @@
 
             const qScope = document.getElementById("spotQuestionScope");
             if (qScope) {
-              qScope.addEventListener("click", () => {
-                speak(null, {
+              qScope.addEventListener("click", (e) => {
+                if (e.target.closest(".fw-card")) return;
+                speakTextSmart(sc.q, {
                   toggleIfPlaying: true,
                   scopeEl: qScope,
                   statusMountEl: qScope.querySelector(".tts-toy-status")
@@ -403,16 +416,16 @@
                     addStars(2);
                     trackMission("knowledge", 1);
                     btnSpot.classList.add("done");
-                    btnSpot.textContent = "✅ 眼力已通关 (+2⭐)";
+                    btnSpot.textContent = en ? "✅ Spotted! (+2⭐)" : "✅ 眼力已通关 (+2⭐)";
                   }
                   fb.innerHTML = `
                     <div class="kid-voice-bubble tts-reading-scope" style="border-color:#4ade80;background:rgba(74,222,128,0.18);margin-top:6px;">
                       <div class="tts-toy-status"></div>
-                      <div class="tts-clauses-body">🎉👁️ ${renderClauses(sc.explain)}</div>
+                      <div class="tts-clauses-body">🎉👁️ ${en ? flip(sc.explain) : renderClauses(sc.explain)}</div>
                     </div>
                   `;
                   const expScope = fb.querySelector(".kid-voice-bubble");
-                  speak(null, {
+                  speakTextSmart(sc.explain, {
                     scopeEl: expScope || fb,
                     statusMountEl: fb.querySelector(".tts-toy-status"),
                     playTapSfx: false
@@ -422,7 +435,7 @@
                   void ob.offsetWidth;
                   ob.classList.add("picked-wrong");
                   if (window.SFX) window.SFX.bonk();
-                  fb.innerHTML = `<div style="font-size:0.84rem;font-weight:800;color:var(--c-warn-text);padding:4px;">💡 再仔细看看短片或照片里的细节，换另一个试试！</div>`;
+                  fb.innerHTML = `<div style="font-size:0.84rem;font-weight:800;color:var(--c-warn-text);padding:4px;">${en ? "💡 Look closer at the science clues and try the other choice!" : "💡 再仔细看看短片或照片里的细节，换另一个试试！"}</div>`;
                 }
               });
             });
@@ -434,41 +447,42 @@
       }
     }
 
-    // 1.5 挂载 v6.0「🏠 生活中的真实实例 · 写实插画伴读卡」（让小朋友一听就懂！）
+    // 1.5 挂载 v6.0/v8.0「🏠 生活中的真实实例 · 大图绘本插画伴读卡」
     const lifeMount = document.getElementById("modalLifeExampleMount");
     if (lifeMount) {
-      if (extra && extra.lifeStory) {
-        const lifeTitle = extra.lifeTitle || "🏠 生活中的真实小例子";
-        const lifeTag = extra.lifeSceneTag || "生活科学实例";
-        const lifeIcon = extra.lifeIcon || "🏠✨";
-        const illuSrc = extra.illuSrc || "";
+      const lifeStoryTxt = en && enCard && enCard.lifeStory ? enCard.lifeStory : (extra && extra.lifeStory) || "";
+      if (lifeStoryTxt) {
+        const lifeTitle = en && enCard && enCard.lifeTitle ? enCard.lifeTitle : (extra && extra.lifeTitle) || "🏠 Real-Life Example";
+        const lifeTag = en && enCard && enCard.lifeSceneTag ? enCard.lifeSceneTag : (extra && extra.lifeSceneTag) || "Everyday Science";
+        const lifeIcon = (extra && extra.lifeIcon) || "🏠✨";
+        const illuSrc = (extra && extra.illuSrc) || `assets/illustrations/${item.id}.jpg`;
 
         lifeMount.style.display = "block";
         lifeMount.innerHTML = `
-          <div class="life-example-card">
+          <div class="life-example-card ${en ? "storybook-life-card" : ""}">
             <div class="life-example-header">
               <div class="life-example-title-wrap">
                 <span class="life-scene-tag">${esc(lifeIcon)} ${esc(lifeTag)}</span>
-                <span class="life-example-title">${ruby(lifeTitle)}</span>
+                <span class="life-example-title">${en ? flip(lifeTitle) : ruby(lifeTitle)}</span>
               </div>
               <button type="button" class="mini-btn on" id="btnSpeakLifeStory" style="padding:6px 13px;font-size:0.82rem;">
-                🔊 听生活实例
+                ${en ? "🔊 Listen Story" : "🔊 听生活实例"}
               </button>
             </div>
             ${
               illuSrc
                 ? `
-              <div class="life-example-illu-wrap" id="lifeIlluTrigger" title="点击观看写实插画+姐姐配音生活剧场视频">
-                <img src="${esc(illuSrc)}" alt="${esc(item.name)}生活实例写实图解" class="life-example-illu-img" loading="lazy" />
-                <span class="life-example-play-badge">🎬 点画看配音生活剧场</span>
+              <div class="life-example-illu-wrap ${en ? "storybook-illu-prominent" : ""}" id="lifeIlluTrigger" title="${en ? "Tap illustration to watch narrated story clip" : "点击观看写实插画+姐姐配音生活剧场视频"}">
+                <img src="${esc(illuSrc)}" alt="${esc(en && enCard ? enCard.enName : item.name)} illustration" class="life-example-illu-img" loading="lazy" />
+                <span class="life-example-play-badge">${en ? "🎬 Tap Picture to Watch Story Clip" : "🎬 点画看配音生活剧场"}</span>
               </div>
             `
                 : ""
             }
-            <div class="kid-voice-bubble life-example-story-bubble tts-reading-scope" id="lifeStorySpeechScope" title="点击开始或暂停姐姐讲生活小例子">
+            <div class="kid-voice-bubble life-example-story-bubble tts-reading-scope" id="lifeStorySpeechScope">
               <div class="tts-toy-status" id="lifeStoryStatusMount"></div>
-              <span class="tts-seg" data-tts-seg="${esc(lifeTitle)}。" style="display:none;"></span>
-              <div class="tts-clauses-body">💡 ${renderClauses(extra.lifeStory)}</div>
+              <span class="tts-seg" data-tts-seg="${esc(lifeTitle)}." style="display:none;"></span>
+              <div class="tts-clauses-body">💡 ${en ? flip(lifeStoryTxt) : renderClauses(lifeStoryTxt)}</div>
             </div>
           </div>
         `;
@@ -485,38 +499,64 @@
 
         const btnLife = document.getElementById("btnSpeakLifeStory");
         const lifeScope = document.getElementById("lifeStorySpeechScope");
-        const fullLifeSpoken = `${lifeTitle}。${extra.lifeStory}`;
+        const fullLifeSpoken = en ? `${lifeTitle}. ${lifeStoryTxt}` : `${lifeTitle}。${lifeStoryTxt}`;
         const triggerLifeSpeak = () => {
           stopVoiceStudio();
           shadowingEngine.stopAll();
           const vEl = document.getElementById("modalActionVideo");
           if (vEl && !vEl.paused) vEl.pause();
-          speak(fullLifeSpoken, {
+          speakTextSmart(fullLifeSpoken, {
             toggleIfPlaying: true,
             scopeEl: lifeScope,
             triggerBtn: btnLife,
             statusMountEl: document.getElementById("lifeStoryStatusMount"),
-            defaultBtnHTML: "🔊 听生活实例"
+            defaultBtnHTML: en ? "🔊 Listen Story" : "🔊 听生活实例"
           });
         };
         if (btnLife) btnLife.addEventListener("click", triggerLifeSpeak);
-        if (lifeScope) lifeScope.addEventListener("click", triggerLifeSpeak);
+        if (lifeScope) lifeScope.addEventListener("click", (e) => {
+          if (e.target.closest(".fw-card")) return;
+          if (!en) triggerLifeSpeak();
+        });
       } else {
         lifeMount.style.display = "none";
         lifeMount.innerHTML = "";
       }
     }
 
-    // 2. 挂载右侧「🙋‍♀️ 好奇宝宝十万个为什么 (3连问)」+「🇬🇧 趣味英语小课堂」
+    // 2. 挂载右侧「🙋‍♀️ 好奇宝宝十万个为什么 (3连问)」+「🇬🇧 本卡核心词汇小课堂」
     const rightExtraMount = document.getElementById("modalCuriosityAndEnglishMount");
     if (!rightExtraMount || !extra) return;
 
-    const curiosities = Array.isArray(extra.curiosities) ? extra.curiosities : [];
+    const curiosities = en && enCard && Array.isArray(enCard.curiosities) && enCard.curiosities.length
+      ? enCard.curiosities
+      : (Array.isArray(extra.curiosities) ? extra.curiosities : []);
     const unlockedCount = curiosities.filter((_, idx) =>
       state.unlockedCuriosities.includes(`${item.id}_${idx}`)
     ).length;
 
-    const vocabList = Array.isArray(extra.vocab) ? extra.vocab : [];
+    // v8.0: Surface KET/PET + Kids-AWL Core Words that appear in or link to this card!
+    let cardCoreVocab = [];
+    if (Array.isArray(window.CORE_VOCAB_DATA) && window.CORE_VOCAB_DATA.length) {
+      const linked = window.CORE_VOCAB_DATA.filter((cv) => Array.isArray(cv.cards) && cv.cards.includes(item.id));
+      cardCoreVocab = linked.slice(0, 4);
+      if (cardCoreVocab.length < 3 && enCard) {
+        const hay = `${enCard.summary || ""} ${enCard.lifeStory || ""}`.toLowerCase();
+        const usedW = new Set(cardCoreVocab.map((c) => c.w));
+        for (const cv of window.CORE_VOCAB_DATA) {
+          if (usedW.has(cv.w)) continue;
+          if (new RegExp(`\\b${cv.w}\\b`, "i").test(hay)) {
+            usedW.add(cv.w);
+            cardCoreVocab.push(cv);
+            if (cardCoreVocab.length >= 4) break;
+          }
+        }
+      }
+    }
+    const vocabList = cardCoreVocab.length >= 2
+      ? cardCoreVocab.map((cv) => ({ w: cv.w, zh: cv.zh, ipa: cv.ipa, pos: cv.pos, level: cv.level, theme: cv.theme, ex: cv.ex, enDef: cv.enDef, icon: "⭐" }))
+      : (Array.isArray(extra.vocab) ? extra.vocab : []);
+
     const enScene = extra.enScene || null;
     const shadowWon = state.wonEnShadowing.includes(item.id);
     const spellWon = state.wonCardSpelling.includes(item.id);
@@ -524,15 +564,15 @@
     const isEnSlow = Boolean(window.DoubaoTTS && window.DoubaoTTS.enSlowMode);
 
     rightExtraMount.innerHTML = `
-      <!-- 模块 A：小朋友最好奇的「十万个为什么」深度语音故事区 -->
+      <!-- 模块 A：小朋友最好奇的「十万个为什么 / Curious Why?」深度故事区 -->
       <div class="curiosity-panel-card">
         <div class="curiosity-header">
           <div>
-            <span class="curiosity-title">🙋‍♀️ 好奇宝宝「十万个为什么」</span>
-            <span class="curiosity-count-pill" id="curiosityProgressBadge">💡 已解锁 ${unlockedCount}/${curiosities.length}</span>
+            <span class="curiosity-title">🙋‍♀️ ${en ? "Curious Why? (3 Fun Secrets)" : "好奇宝宝「十万个为什么」"}</span>
+            <span class="curiosity-count-pill" id="curiosityProgressBadge">💡 ${en ? `Unlocked ${unlockedCount}/${curiosities.length}` : `已解锁 ${unlockedCount}/${curiosities.length}`}</span>
           </div>
-          <button type="button" class="mini-btn curiosity-playall-btn" id="btnPlayAllStory" title="像听故事电台一样连播整张卡的深度秘密">
-            📻 连讲全部秘密
+          <button type="button" class="mini-btn curiosity-playall-btn" id="btnPlayAllStory">
+            ${en ? "📻 Listen All 3" : "📻 连讲全部秘密"}
           </button>
         </div>
 
@@ -544,7 +584,7 @@
               return `
                 <button type="button" class="curiosity-q-btn ${isLit ? "unlocked" : ""}" data-cidx="${idx}">
                   <span class="cq-icon">${c.icon || "💡"}</span>
-                  <span class="cq-text">${ruby(c.q)}</span>
+                  <span class="cq-text">${en ? esc(c.q) : ruby(c.q)}</span>
                   <span class="cq-arrow">${isLit ? "🔊" : "✨+1⭐"}</span>
                 </button>
               `;
@@ -555,67 +595,68 @@
         <div id="curiosityAnswerStage"></div>
       </div>
 
-      <!-- 模块 B：🇬🇧 趣味英语小课堂（物种名片 + 点读科学词卡 + 双句跟读 + 拼词闯关 + 开口测评） -->
+      <!-- 模块 B：🇬🇧 本卡核心词汇课堂（KET/PET + Kids-AWL 核心词卡 + 拼词闯关 + 开口跟读） -->
       <div class="english-explorer-card">
         <div class="en-explorer-header">
-          <div class="en-species-badge" id="btnSpeakEnSpecies" title="点击跟读英文名字（读2遍）">
-            <span class="en-flag-chip">🇬🇧 英文名片</span>
+          <div class="en-species-badge" id="btnSpeakEnSpecies" title="Tap to hear species name">
+            <span class="en-flag-chip">${en ? "⭐ Core Words" : "🇬🇧 核心词卡"}</span>
             <span class="en-species-name">${esc(extra.enName || "")}</span>
             ${extra.enPron ? `<span class="en-species-pron">${esc(extra.enPron)}</span>` : ""}
             <span class="en-tap-horn">🔊</span>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
-            <button type="button" class="mini-btn ${isEnSlow ? "on" : ""}" id="btnCardEnSlow" style="padding:5px 10px;min-height:34px;font-size:0.78rem;" title="切换英语朗读慢速/常速">
-              ${isEnSlow ? "🐢 慢速" : "🐇 常速"}
+            <button type="button" class="mini-btn ${isEnSlow ? "on" : ""}" id="btnCardEnSlow" style="padding:5px 10px;min-height:34px;font-size:0.78rem;">
+              ${isEnSlow ? (en ? "🐢 Slow" : "🐢 慢速") : (en ? "🐇 Normal" : "🐇 常速")}
             </button>
             ${
               vocabList.length > 0
                 ? `<button type="button" class="en-spell-entry-btn ${spellWon ? "won" : ""}" id="btnToggleCardSpell">
-                     🧩 ${spellWon ? "拼词已通关 🌟" : "拼词闯关 (+2⭐)"}
+                     🧩 ${spellWon ? (en ? "Spelled 🌟" : "拼词已通关 🌟") : (en ? "Spell Challenge (+2⭐)" : "拼词闯关 (+2⭐)")}
                    </button>`
                 : ""
             }
             <button type="button" class="en-shadow-entry-btn ${shadowWon ? "won" : ""}" id="btnToggleShadowing">
-              🎙️ ${shadowWon ? "跟读已摘星 🌟" : "我来开口读 (+2⭐)"}
+              🎙️ ${shadowWon ? (en ? "Spoken 🌟" : "跟读已摘星 🌟") : (en ? "Speak Aloud (+2⭐)" : "我来开口读 (+2⭐)")}
             </button>
           </div>
         </div>
 
-        <!-- 3 张可点读核心科学单词卡 -->
+        <!-- 本卡核心词汇点读卡（彩色矢量图标 + KET/PET 级别标） -->
         <div class="en-vocab-grid">
           ${vocabList
-            .map(
-              (v, vIdx) => {
-                const isMast = masteredSet.has(String(v.w || "").toLowerCase());
-                return `
-            <button type="button" class="en-vocab-pill ${isMast ? "is-mastered" : ""}" data-vidx="${vIdx}" data-vkey="${esc(String(v.w || "").toLowerCase())}" title="点我听纯正英文发音和例句">
-              ${isMast ? `<span class="ev-mastered-dot" title="已掌握">✓</span>` : ""}
-              <span class="ev-icon">${v.icon || "🔤"}</span>
+            .map((v, vIdx) => {
+              const vKey = String(v.w || "").toLowerCase();
+              const isMast = masteredSet.has(vKey) || (window.WordBox && window.WordBox.getCoreProgress(vKey).mastered);
+              const svgIcon = (v.theme && window.CORE_SVG_ICONS && window.CORE_SVG_ICONS[v.theme]) || "";
+              return `
+            <button type="button" class="en-vocab-pill ${isMast ? "is-mastered" : ""}" data-vidx="${vIdx}" data-vkey="${esc(vKey)}">
+              ${isMast ? `<span class="ev-mastered-dot" title="Mastered">✓</span>` : ""}
+              ${v.level ? `<span class="wb-lvl-tag ev-lvl lvl-${esc(v.level).toLowerCase()}">${esc(v.level)}</span>` : ""}
+              <span class="ev-icon">${svgIcon || v.icon || "🔤"}</span>
               <span class="ev-word">${esc(v.w)}</span>
+              ${v.ipa ? `<span class="ev-ipa">${esc(v.ipa)}</span>` : ""}
               <span class="ev-zh">${esc(v.zh)}</span>
             </button>
           `;
-              }
-            )
+            })
             .join("")}
         </div>
         <div id="enVocabExampleToast" class="en-vocab-toast" style="display:none;"></div>
 
-        <!-- 🧩 本卡 3 词字母积木拼词台 -->
+        <!-- 🧩 本卡核心词字母积木拼词台 -->
         <div id="enCardSpellStage" class="en-card-spell-stage" style="display:none;"></div>
 
-        <!-- 进阶第 2 句情景双语胶囊（配合上方第 1 句，双句进阶磨耳朵！） -->
         ${
           enScene && enScene.en
             ? `
-          <div class="en-scene-sentence-box tts-reading-scope" id="enSceneSentenceBox" title="点击听这句地道英语（连读2遍+中文解释）">
+          <div class="en-scene-sentence-box tts-reading-scope" id="enSceneSentenceBox">
             <div class="tts-toy-status"></div>
             <div class="en-scene-top">
-              <span class="bilingual-tag">🇬🇧 实况情景句 ×2遍</span>
-              <span style="font-size:0.75rem;color:var(--text-muted);font-weight:800;">👆 点句子跟读</span>
+              <span class="bilingual-tag">🇬🇧 ${en ? "Key Science Sentence" : "实况情景句 ×2遍"}</span>
+              <span style="font-size:0.75rem;color:var(--text-muted);font-weight:800;">${en ? "👆 Tap words to flip · tap card to listen" : "👆 点句子跟读"}</span>
             </div>
-            <div class="en-scene-en">${highlightWords(enScene.en, enScene.kw)}</div>
-            <div class="en-scene-zh">${ruby(enScene.zh)}</div>
+            <div class="en-scene-en">${en ? flip(enScene.en) : highlightWords(enScene.en, enScene.kw)}</div>
+            ${!en ? `<div class="en-scene-zh">${ruby(enScene.zh)}</div>` : ""}
           </div>
         `
             : ""
@@ -626,7 +667,7 @@
       </div>
     `;
 
-    // 绑定「十万个为什么」单题点击展开与朗读
+    // 绑定「十万个为什么 / Curious Why?」单题点击展开与朗读
     const ansStage = document.getElementById("curiosityAnswerStage");
     const qBtns = rightExtraMount.querySelectorAll(".curiosity-q-btn");
 
@@ -654,28 +695,29 @@
           state.unlockedCuriosities.includes(`${item.id}_${i}`)
         ).length;
         const badge = document.getElementById("curiosityProgressBadge");
-        if (badge) badge.textContent = `💡 已解锁 ${nowCnt}/${curiosities.length}`;
+        if (badge) badge.textContent = en ? `💡 Unlocked ${nowCnt}/${curiosities.length}` : `💡 已解锁 ${nowCnt}/${curiosities.length}`;
       }
 
       ansStage.innerHTML = `
-        <div class="kid-voice-bubble curiosity-answer-bubble tts-reading-scope" title="点击暂停或重新听姐姐讲">
+        <div class="kid-voice-bubble curiosity-answer-bubble tts-reading-scope">
           <div class="tts-toy-status"></div>
-          <div class="curiosity-q-echo tts-seg" data-tts-seg="${esc(c.q)}">${c.icon || "💡"} ${ruby(c.q)}</div>
-          <div class="tts-clauses-body">${renderClauses(c.a)}</div>
+          <div class="curiosity-q-echo tts-seg" data-tts-seg="${esc(c.q)}">${c.icon || "💡"} ${en ? flip(c.q) : ruby(c.q)}</div>
+          <div class="tts-clauses-body">${en ? flip(c.a) : renderClauses(c.a)}</div>
         </div>
       `;
       const bubble = ansStage.querySelector(".kid-voice-bubble");
-      const curSpoken = `${c.q}${c.a}`;
+      const curSpoken = `${c.q} ${c.a}`;
       if (bubble) {
-        bubble.addEventListener("click", () => {
-          speak(curSpoken, {
+        bubble.addEventListener("click", (e) => {
+          if (e.target.closest(".fw-card")) return;
+          speakTextSmart(curSpoken, {
             toggleIfPlaying: true,
             scopeEl: bubble,
             statusMountEl: ansStage.querySelector(".tts-toy-status")
           });
         });
       }
-      speak(curSpoken, {
+      speakTextSmart(curSpoken, {
         scopeEl: bubble || ansStage,
         statusMountEl: ansStage.querySelector(".tts-toy-status"),
         playTapSfx: false
@@ -690,7 +732,7 @@
       });
     });
 
-    // 绑定「📻 连讲全部秘密」
+    // 绑定「📻 连讲全部秘密 / Listen All 3」
     const btnPlayAll = document.getElementById("btnPlayAllStory");
     if (btnPlayAll && curiosities.length > 0) {
       btnPlayAll.addEventListener("click", () => {
@@ -710,27 +752,26 @@
           if (arrow) arrow.textContent = "🔊";
         });
         const badge = document.getElementById("curiosityProgressBadge");
-        if (badge) badge.textContent = `💡 已解锁 ${curiosities.length}/${curiosities.length}`;
+        if (badge) badge.textContent = en ? `💡 Unlocked ${curiosities.length}/${curiosities.length}` : `💡 已解锁 ${curiosities.length}/${curiosities.length}`;
 
-        // 组合一段约 520 字以内的完整连播故事（适配 600 字单次合成上限，0断层丝滑连读！）
         const combinedParagraphs = curiosities
-          .map((c, i) => `秘密${i + 1}：${c.q}${c.a}`)
+          .map((c, i) => (en ? `Secret ${i + 1}: ${c.q} ${c.a}` : `秘密${i + 1}：${c.q}${c.a}`))
           .join(" ");
-        const trimmedStory = combinedParagraphs.slice(0, 560);
+        const trimmedStory = en ? combinedParagraphs : combinedParagraphs.slice(0, 560);
 
         ansStage.innerHTML = `
-          <div class="kid-voice-bubble curiosity-answer-bubble tts-reading-scope" title="点击停止或重播全套秘密">
+          <div class="kid-voice-bubble curiosity-answer-bubble tts-reading-scope">
             <div class="tts-toy-status"></div>
-            <div class="tts-clauses-body">📻 ${renderClauses(trimmedStory)}</div>
+            <div class="tts-clauses-body">📻 ${en ? flip(trimmedStory) : renderClauses(trimmedStory)}</div>
           </div>
         `;
         const bubble = ansStage.querySelector(".kid-voice-bubble");
-        speak(null, {
+        speakTextSmart(trimmedStory, {
           toggleIfPlaying: true,
           scopeEl: bubble || ansStage,
           triggerBtn: btnPlayAll,
           statusMountEl: ansStage.querySelector(".tts-toy-status"),
-          defaultBtnHTML: "📻 连讲全部秘密"
+          defaultBtnHTML: en ? "📻 Listen All 3" : "📻 连讲全部秘密"
         });
       });
     }

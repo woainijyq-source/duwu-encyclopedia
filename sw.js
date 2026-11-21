@@ -1,5 +1,5 @@
 // 奇妙毒物科学游乐园 Service Worker (iPad 离线秒开 & 海外实拍图极速缓存)
-const CACHE_NAME = "duwu-playground-v7.1";
+const CACHE_NAME = "duwu-playground-v8.1";
 const CORE_SHELL = [
   "./",
   "./index.html",
@@ -15,8 +15,13 @@ const CORE_SHELL = [
   "./js/data-molecules3d.js",
   "./js/data-labs.js",
   "./js/data-hunt-scenes.js",
+  "./js/data-core-vocab.js",
+  "./js/data-english-encyclopedia.js",
+  "./js/data-flip-dict.js",
+  "./js/i18n-engine.js",
   "./js/visualizers.js",
   "./js/doubao-tts.js",
+  "./js/upgrade8-flip-reader.js",
   "./js/ai-companion.js",
   "./js/upgrade1-ecosystem.js",
   "./js/upgrade2-molsurgery.js",
@@ -24,10 +29,16 @@ const CORE_SHELL = [
   "./js/upgrade4-voice.js",
   "./js/upgrade5-english-live.js",
   "./js/upgrade6-english-playground.js",
+  "./js/upgrade9-word-games.js",
   "./js/upgrade7-knowledge-games.js",
   "./js/app.js",
   "./assets/apple-touch-icon.png",
-  "./assets/icon-512.png"
+  "./assets/icon-512.png",
+  "./assets/art/adventure_island.jpg",
+  "./assets/art/mascot_happy.jpg",
+  "./assets/art/mascot_reading.jpg",
+  "./assets/art/mascot_thinking.jpg",
+  "./assets/art/mascot_cheer.jpg"
 ];
 
 self.addEventListener("install", (event) => {

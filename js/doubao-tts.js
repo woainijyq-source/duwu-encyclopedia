@@ -13,16 +13,27 @@
   const EMOJI_RE = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2300}-\u{23FF}\u{2B00}-\u{2BFF}\u{FE0F}✓✗×➕➖👇👆👈👉➜]+/gu;
 
   function normalizeTtsText(raw) {
-    return String(raw || "")
-      .replace(/\+1\s*❤️/g, "加1颗红心")
-      .replace(/°C/g, "摄氏度")
-      .replace(/mmHg/g, "毫米汞柱")
-      .replace(/BPM/g, "次每分钟")
+    let s = String(raw || "");
+    const hasZh = /[\u4e00-\u9fff]/.test(s);
+    if (hasZh) {
+      s = s
+        .replace(/\+1\s*❤️/g, "加1颗红心")
+        .replace(/°C/g, "摄氏度")
+        .replace(/mmHg/g, "毫米汞柱")
+        .replace(/BPM/g, "次每分钟");
+    } else {
+      s = s
+        .replace(/°C/g, " degrees Celsius")
+        .replace(/mmHg/g, " millimeters of mercury")
+        .replace(/BPM/g, " beats per minute")
+        .replace(/—/g, ", ");
+    }
+    return s
       .replace(EMOJI_RE, " ")
       .replace(/\s+/g, " ")
       .replace(/([。！？；，、：”』」）》])\s+/g, "$1")
       .trim()
-      .slice(0, 600);
+      .slice(0, 1200);
   }
 
   function cleanMoleculeForSpeech(mol) {
@@ -368,6 +379,12 @@
       return false;
     }
 
+    _lookupPrebuiltUrl(key) {
+      const map = window.TTS_PREBUILT_MAP;
+      if (!map || !key) return null;
+      return map[key] || map[String(key).toLowerCase()] || null;
+    }
+
     async _fetchOrLoadBlob(key) {
       if (this.memCache.has(key)) {
         return this.memCache.get(key);
@@ -383,8 +400,8 @@
       }
 
       const p = (async () => {
-        // 1. 优先从内置预生成的本地静态语音包 (assets/tts/*.mp3) 秒级加载，直接出声音！
-        const prebuiltUrl = window.TTS_PREBUILT_MAP && window.TTS_PREBUILT_MAP[key];
+        // 1. 优先从内置预生成的本地静态真人语音包 (assets/tts/*.mp3) 0ms 加载！
+        const prebuiltUrl = this._lookupPrebuiltUrl(key);
         if (prebuiltUrl) {
           try {
             const staticRes = await fetch(`./${prebuiltUrl}`);
@@ -399,7 +416,7 @@
           } catch (_) {}
         }
 
-        // 2. 动态文本（如随时互动 AI 回答）走服务端缓存/实时合成接口
+        // 2. 动态文本走服务端自建免费 VoxCPM2 合成 + 永久缓存接口
         const res = await fetch(`./api/tts?t=${encodeURIComponent(key)}`);
         if (!res.ok) {
           throw new Error(`tts_http_${res.status}`);
@@ -426,6 +443,8 @@
     async preloadText(rawText) {
       const key = normalizeTtsText(rawText);
       if (!key) return;
+      // Only preload static prebuilt clips so opening a card never fires unsolicited live /api/tts hits
+      if (!this._lookupPrebuiltUrl(key)) return;
       try {
         const blob = await this._fetchOrLoadBlob(key);
         if (blob && this.audioCtx && !this.decodedCache.has(key)) {
@@ -542,10 +561,11 @@
 
     _applyWaitingUI(ctx) {
       if (!ctx) return;
+      const en = window.isEn ? window.isEn() : false;
       if (ctx.triggerBtn) {
         ctx.triggerBtn.classList.remove("is-playing");
         ctx.triggerBtn.classList.add("is-loading");
-        ctx.triggerBtn.innerHTML = `<span class="tts-spinner" aria-hidden="true"></span><span>正在准备…</span>`;
+        ctx.triggerBtn.innerHTML = `<span class="tts-spinner" aria-hidden="true"></span><span>${en ? "Loading…" : "正在准备…"}</span>`;
       }
       if (ctx.scopeEl) {
         ctx.scopeEl.classList.remove("tts-scope-playing");
@@ -555,7 +575,7 @@
         ctx.statusMountEl.innerHTML = `
           <div class="tts-live-bar loading">
             <span class="tts-spinner" aria-hidden="true"></span>
-            <span>正在合成语音讲解，请稍候…</span>
+            <span>${en ? "Preparing real studio voice…" : "正在合成语音讲解，请稍候…"}</span>
           </div>
         `;
       }
@@ -566,10 +586,11 @@
 
     _applyPlayingUI(ctx) {
       if (!ctx) return;
+      const en = window.isEn ? window.isEn() : false;
       if (ctx.triggerBtn) {
         ctx.triggerBtn.classList.remove("is-loading");
         ctx.triggerBtn.classList.add("is-playing");
-        ctx.triggerBtn.innerHTML = `<span class="tts-wave-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>停止讲解</span>`;
+        ctx.triggerBtn.innerHTML = `<span class="tts-wave-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>${en ? "Stop" : "停止讲解"}</span>`;
       }
       if (ctx.scopeEl) {
         ctx.scopeEl.classList.remove("tts-scope-loading");
@@ -579,7 +600,7 @@
         ctx.statusMountEl.innerHTML = `
           <div class="tts-live-bar playing">
             <span class="tts-wave-bars" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
-            <span>正在讲解 · 跟着放大的句子一起看！</span>
+            <span>${en ? "Reading aloud · Tap any word to flip!" : "正在讲解 · 跟着放大的句子一起看！"}</span>
             <div class="tts-mini-progress"><div class="tts-mini-progress-fill"></div></div>
           </div>
         `;
@@ -736,8 +757,141 @@
       return zhCN || matches[0];
     }
 
-    // 清晰纯粹的英语朗读（0ms本地即时发声，支持 🐢 慢速清晰 / 🐇 常速 & 自动选高质英文音色）
-    speakEnglish(enText, options) {
+    setEnglishSlowMode(flag) {
+      this.enSlowMode = Boolean(flag);
+    }
+
+    // Play a short real studio MP3 clip (prebuilt assets/tts/ or server VoxCPM2) with optional playbackRate & repeat
+    async _playStudioClip(key, opts) {
+      const o = opts || {};
+      const myToken = o.token;
+      const isSlow = typeof o.slow === "boolean" ? o.slow : this.enSlowMode;
+      const pbRate = typeof o.playbackRate === "number" ? o.playbackRate : (isSlow ? 0.8 : 1.0);
+      const repeat = Math.max(1, Math.min(3, o.repeat || 1));
+
+      let audioBuffer = this.decodedCache.get(key) || null;
+      let blob = null;
+      if (!audioBuffer) {
+        blob = await this._fetchOrLoadBlob(key);
+        if (myToken !== this.reqToken || !this.enabled) return true;
+        if (this.audioCtx) {
+          try {
+            const arrBuf = await blob.arrayBuffer();
+            audioBuffer = await this._decodeAudioData(arrBuf);
+            if (audioBuffer) this.decodedCache.set(key, audioBuffer);
+          } catch (_) {
+            audioBuffer = null;
+          }
+        }
+      }
+      if (myToken !== this.reqToken || !this.enabled) return true;
+
+      const playOnce = () =>
+        new Promise((resolve) => {
+          if (myToken !== this.reqToken || !this.enabled) return resolve();
+          if (audioBuffer && this.audioCtx) {
+            const startBuf = () => {
+              try {
+                const src = this.audioCtx.createBufferSource();
+                src.buffer = audioBuffer;
+                src.playbackRate.value = pbRate;
+                src.connect(this.audioCtx.destination);
+                this.activeSource = src;
+                src.onended = () => resolve();
+                src.start(0);
+              } catch (_) {
+                resolve();
+              }
+            };
+            if (this.audioCtx.state === "suspended") {
+              this.audioCtx.resume().then(startBuf).catch(startBuf);
+            } else {
+              startBuf();
+            }
+          } else if (blob) {
+            try {
+              const url = URL.createObjectURL(blob);
+              if (this.currentObjectUrl) URL.revokeObjectURL(this.currentObjectUrl);
+              this.currentObjectUrl = url;
+              this.audio.src = url;
+              this.audio.playbackRate = pbRate;
+              this.audio.onended = () => resolve();
+              this.audio.onerror = () => resolve();
+              this.audio.play().catch(() => resolve());
+            } catch (_) {
+              resolve();
+            }
+          } else {
+            resolve();
+          }
+        });
+
+      for (let i = 0; i < repeat; i++) {
+        if (myToken !== this.reqToken || !this.enabled) break;
+        await playOnce();
+        if (i + 1 < repeat && myToken === this.reqToken) {
+          await new Promise((r) => {
+            const t = setTimeout(r, 220);
+            this._enQueueTimers.push(t);
+          });
+        }
+      }
+      if (myToken === this.reqToken && typeof o.onEnd === "function") o.onEnd();
+      return true;
+    }
+
+    // Real-voice-first single-word pronunciation for Tap-to-Flip reading:
+    //   1. Prebuilt 48kHz VoxCPM2 MP3 (0ms!) -> 2. Server VoxCPM2 ./api/tts (cached forever!) -> 3. Native en-US fallback
+    async speakWordFast(word, options) {
+      const opts = options || {};
+      if (!this.enabled) return;
+      const clean = String(word || "").replace(/[^A-Za-z'\-\s]/g, "").trim();
+      if (!clean) return;
+      this._ensureAudioContext();
+      this.stop();
+      const myToken = ++this.reqToken;
+      const key = normalizeTtsText(clean);
+      const lowKey = key.toLowerCase();
+      const hitKey = this._lookupPrebuiltUrl(key) ? key : (this._lookupPrebuiltUrl(lowKey) ? lowKey : lowKey);
+
+      try {
+        await this._playStudioClip(hitKey, { ...opts, token: myToken, repeat: 1 });
+        return;
+      } catch (_) {
+        if (myToken !== this.reqToken || !this.enabled) return;
+      }
+
+      if (!("speechSynthesis" in window)) return;
+      const isSlow = typeof opts.slow === "boolean" ? opts.slow : this.enSlowMode;
+      try {
+        const u = new SpeechSynthesisUtterance(clean);
+        u.lang = "en-US";
+        u.rate = typeof opts.rate === "number" ? opts.rate : (isSlow ? 0.72 : 0.92);
+        u.pitch = 1.04;
+        const v = this._pickVoice("en");
+        if (v) u.voice = v;
+        window.speechSynthesis.speak(u);
+      } catch (_) {}
+    }
+
+    // Real-voice-first English narration for all 99 cards, life stories, curiosities, labs & quests:
+    //   1. Prebuilt 48kHz VoxCPM2 MP3 (0ms!) -> 2. Live server VoxCPM2 ./api/tts (permanent disk cache) -> 3. en-US fallback
+    async speakEnglishNarration(enText, options) {
+      const opts = options || {};
+      if (!this.enabled) return;
+      const clean = String(enText || "").replace(EMOJI_RE, " ").replace(/—/g, ", ").replace(/\s+/g, " ").trim();
+      if (!clean) return;
+      const isSlow = typeof opts.slow === "boolean" ? opts.slow : this.enSlowMode;
+      return this.speak(clean, {
+        ...opts,
+        playbackRate: typeof opts.playbackRate === "number" ? opts.playbackRate : (isSlow ? 0.82 : 1.0),
+        defaultBtnHTML: opts.defaultBtnHTML || (opts.useAI ? "🎙️ AI Voice" : "🔊 Read Aloud")
+      });
+    }
+
+    // Real-voice-first English clip player (games, sentences, species names):
+    //   Prioritizes prebuilt/server VoxCPM2 human audio, gracefully falls back to en-US offline!
+    async speakEnglish(enText, options) {
       const opts = options || {};
       if (!this.enabled) return;
       const clean = String(enText || "").replace(EMOJI_RE, " ").replace(/—/g, ", ").replace(/\s+/g, " ").trim();
@@ -748,10 +902,18 @@
         window.SFX.pop();
       }
 
-      const wasBusy =
-        "speechSynthesis" in window && (window.speechSynthesis.speaking || window.speechSynthesis.pending);
       this.stop();
       const myToken = ++this.reqToken;
+      const key = normalizeTtsText(clean);
+      const hitKey = this._lookupPrebuiltUrl(key) ? key : (this._lookupPrebuiltUrl(key.toLowerCase()) ? key.toLowerCase() : key);
+
+      try {
+        await this._playStudioClip(hitKey, { ...opts, token: myToken });
+        return;
+      } catch (_) {
+        if (myToken !== this.reqToken || !this.enabled) return;
+      }
+
       if (!("speechSynthesis" in window)) {
         if (typeof opts.onEnd === "function") opts.onEnd();
         return;
@@ -788,12 +950,7 @@
         }
       };
 
-      if (wasBusy) {
-        const t = setTimeout(() => speakOnce(repeat), 40);
-        this._enQueueTimers.push(t);
-      } else {
-        speakOnce(repeat);
-      }
+      speakOnce(repeat);
     }
 
     // 双语单词卡清晰朗读：纯正英文单词×2 -> 中文意思 -> 英文例句（告别中式音色念英文！）
@@ -964,21 +1121,23 @@
           if (this.audioCtx.state === "suspended") {
             await this.audioCtx.resume();
           }
+          const pbRate = typeof opts.playbackRate === "number" ? opts.playbackRate : 1.0;
           this.usingHtmlAudio = false;
           this.usingSpeechSynth = false;
-          this.playDurationSec = audioBuffer.duration;
+          this.playDurationSec = audioBuffer.duration / pbRate;
           this.playOffsetSec = 0;
 
           if (this.activeContext) {
             this.activeContext.timings = this._computeSegmentTimings(
               audioBuffer,
               this.activeContext.segments,
-              audioBuffer.duration
+              audioBuffer.duration / pbRate
             );
           }
 
           const src = this.audioCtx.createBufferSource();
           src.buffer = audioBuffer;
+          src.playbackRate.value = pbRate;
           src.connect(this.audioCtx.destination);
           this.activeSource = src;
           this.playStartCtxTime = this.audioCtx.currentTime;

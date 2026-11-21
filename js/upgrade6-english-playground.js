@@ -66,11 +66,47 @@
 
   window.PlaygroundFX = { celebrate };
 
-  // 构建全书去重后的 251 核心科学英语词库
+  // 构建全书核心英语词库（v8.0 优先接入 680+ KET/PET + Kids-AWL 核心词汇！）
   function buildMasterVocabList() {
     const ceMap = window.CURIOSITY_ENGLISH_DATA || {};
     const catList = window.CATALOG_DATA || [];
+    const catById = new Map(catList.map((c) => [c.id, c]));
     const seen = new Map();
+
+    // 1. Primary: 680+ KET / PET + Kids-AWL Core Vocabulary
+    if (Array.isArray(window.CORE_VOCAB_DATA) && window.CORE_VOCAB_DATA.length > 0) {
+      const themeIconEmoji = {
+        action: "⚡", science: "🔬", defense: "🛡️", nature: "🌿", medicine: "💓", thinking: "🔍"
+      };
+      for (const cv of window.CORE_VOCAB_DATA) {
+        if (!cv || !cv.w) continue;
+        const key = String(cv.w).trim().toLowerCase();
+        if (!/^[a-z]+$/.test(key)) continue;
+        const primaryCardId = (Array.isArray(cv.cards) && cv.cards[0]) || "ch0-01";
+        const cardItem = catById.get(primaryCardId) || catList[0] || {};
+        const ce = ceMap[primaryCardId] || {};
+        if (!seen.has(key)) {
+          seen.set(key, {
+            key,
+            w: cv.w.trim(),
+            zh: cv.zh || "",
+            ipa: cv.ipa || "",
+            pos: cv.pos || "",
+            enDef: cv.enDef || "",
+            theme: cv.theme || "science",
+            level: cv.level || "KET",
+            icon: themeIconEmoji[cv.theme] || "🔤",
+            ex: cv.ex || "",
+            cardId: primaryCardId,
+            cardName: cardItem.name || "",
+            chapter: cardItem.chapter || "ch0",
+            code: cardItem.code || "",
+            enName: ce.enName || ""
+          });
+        }
+      }
+      return Array.from(seen.values());
+    }
 
     for (const item of catList) {
       const ce = ceMap[item.id];
@@ -432,6 +468,7 @@
       this.app = app;
       this.subGame = "builder"; // 'builder' | 'memory' | 'train' | 'wordbook'
       this.chapter = "all";
+      this.themeFilter = "all"; // v8.0: 'all' | 'wordbox' | 'action' | 'science' | 'defense' | 'nature' | 'medicine' | 'thinking'
       this.slowMode = false;
 
       this.allVocab = buildMasterVocabList();
@@ -518,6 +555,9 @@
     _markWordMastered(wordKey) {
       const key = String(wordKey || "").toLowerCase();
       if (!key) return false;
+      if (window.WordBox && typeof window.WordBox.recordCorrect === "function") {
+        window.WordBox.recordCorrect(key);
+      }
       const s = this.app.state;
       if (!Array.isArray(s.masteredWords)) s.masteredWords = [];
       const isNew = !s.masteredWords.includes(key);
@@ -531,9 +571,10 @@
 
     _speakEn(text, opts) {
       if (!this.app.state.sound) return;
+      const slow = window.DUWU_I18N ? window.DUWU_I18N.slowMode : this.slowMode;
       if (window.DoubaoTTS && window.DoubaoTTS.speakEnglish) {
-        window.DoubaoTTS.enSlowMode = this.slowMode;
-        window.DoubaoTTS.speakEnglish(text, { slow: this.slowMode, ...(opts || {}) });
+        window.DoubaoTTS.enSlowMode = slow;
+        window.DoubaoTTS.speakEnglish(text, { slow, ...(opts || {}) });
       } else {
         this.app.speak(text);
       }
@@ -541,9 +582,10 @@
 
     _speakWordFull(v, opts) {
       if (!this.app.state.sound || !v) return;
+      const slow = window.DUWU_I18N ? window.DUWU_I18N.slowMode : this.slowMode;
       if (window.DoubaoTTS && window.DoubaoTTS.speakBilingualWord) {
-        window.DoubaoTTS.enSlowMode = this.slowMode;
-        window.DoubaoTTS.speakBilingualWord(v.w, v.zh, v.ex, { slow: this.slowMode, ...(opts || {}) });
+        window.DoubaoTTS.enSlowMode = slow;
+        window.DoubaoTTS.speakBilingualWord(v.w, v.zh, v.ex, { slow, ...(opts || {}) });
       } else {
         this.app.speak(`${v.w}! ${v.w}! ${v.zh}`);
       }
@@ -553,14 +595,48 @@
       const el = document.getElementById("enPgMasteredBadge");
       if (el) {
         const cnt = this._getMasteredSet().size;
-        el.textContent = `🏆 已掌握 ${cnt}/${this.allVocab.length} 词`;
+        el.textContent = `🏆 ${cnt}/${this.allVocab.length}`;
       }
     }
 
     _getFilteredVocab() {
-      if (this.chapter === "all") return this.allVocab;
-      const list = this.allVocab.filter((v) => v.chapter === this.chapter);
-      return list.length > 0 ? list : this.allVocab;
+      let base = this.allVocab;
+      if (this.themeFilter === "wordbox" && window.WordBox) {
+        const boxSet = new Set(window.WordBox.getAllBoxItems().map((x) => x.w));
+        const inBox = base.filter((v) => boxSet.has(v.key));
+        if (inBox.length >= 4) base = inBox;
+      } else if (this.themeFilter && this.themeFilter !== "all" && this.themeFilter !== "wordbox") {
+        const byTheme = base.filter((v) => v.theme === this.themeFilter);
+        if (byTheme.length >= 4) base = byTheme;
+      }
+      if (this.chapter === "all") return base;
+      const list = base.filter((v) => v.chapter === this.chapter);
+      return list.length > 0 ? list : base;
+    }
+
+    // v8.0: Mount any of the 6 upgraded games cleanly inside Word Adventure Island (#waiGameStage)
+    mountEmbeddedGame(containerEl, gameId, themeFilter) {
+      if (!containerEl) return;
+      this.allVocab = buildMasterVocabList();
+      this.themeFilter = themeFilter || "all";
+      this.chapter = "all";
+      const mapId = gameId === "bubble" ? "bubbles" : gameId;
+      this._stopSpeakCapture();
+      if (this._bpNextTimer) {
+        clearTimeout(this._bpNextTimer);
+        this._bpNextTimer = null;
+      }
+      this.subGame = mapId;
+      containerEl.innerHTML = `<div id="enPgSubBody"></div>`;
+      if (this.subGame === "builder") this.pickNextBuilderWord();
+      if (this.subGame === "memory") this.setupMemoryBoard();
+      if (this.subGame === "train") this.pickNextTrainSentence();
+      if (this.subGame === "bubbles") this.setupBubbleRound(false);
+      if (this.subGame === "speak") this.pickNextSpeakItem();
+      this.renderSubBody();
+      if (this.subGame === "bubbles" && this.bpMode === "listen" && this.bpTarget) {
+        setTimeout(() => this._speakEn(this.bpTarget.w, { repeat: 2, playTapSfx: false }), 180);
+      }
     }
 
     _getFilteredSentences() {
@@ -814,38 +890,43 @@
     renderWordBuilder(mount) {
       const v = this.wbWord;
       if (!v) return;
+      const en = window.isEn ? window.isEn() : true;
       const photo = this.app.getPhoto(v.cardId);
       const isMastered = this._getMasteredSet().has(v.key);
       const hasWrong = this.wbWrongIndices.size > 0;
+      const svgIcon = (v.theme && window.CORE_SVG_ICONS && window.CORE_SVG_ICONS[v.theme]) || "";
 
       mount.innerHTML = `
         <div class="wb-arena-card">
           <div class="wb-header-row">
             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-              <button type="button" class="scene-pill ${this.wbDiff === "easy" ? "active" : ""}" data-wbdiff="easy">🌱 无干扰入门</button>
-              <button type="button" class="scene-pill ${this.wbDiff === "normal" ? "active" : ""}" data-wbdiff="normal">⚡ 音近干扰 (+3字母)</button>
-              <button type="button" class="scene-pill ${this.wbDiff === "devil" ? "active" : ""}" data-wbdiff="devil">🔥 魔鬼烧脑 (+5干扰)</button>
+              <button type="button" class="scene-pill ${this.wbDiff === "easy" ? "active" : ""}" data-wbdiff="easy">${en ? "🌱 Easy (Exact Letters)" : "🌱 无干扰入门"}</button>
+              <button type="button" class="scene-pill ${this.wbDiff === "normal" ? "active" : ""}" data-wbdiff="normal">${en ? "⚡ Standard (+3 Decoys)" : "⚡ 音近干扰 (+3字母)"}</button>
+              <button type="button" class="scene-pill ${this.wbDiff === "devil" ? "active" : ""}" data-wbdiff="devil">${en ? "🔥 Master (+5 Decoys)" : "🔥 魔鬼烧脑 (+5干扰)"}</button>
             </div>
-            <div class="live-en-streak-pill">🔥 拼词连胜：${this.wbStreak} 词</div>
+            <div class="live-en-streak-pill">🔥 ${en ? `Streak: ${this.wbStreak}` : `拼词连胜：${this.wbStreak} 词`}</div>
           </div>
 
           <div class="wb-prompt-grid">
             <!-- 左侧视觉线索卡 -->
             <div class="wb-clue-panel">
-              <div class="wb-species-mini" id="btnWbOpenCard" title="点击打开它的完整 3D 档案卡">
+              <div class="wb-species-mini" id="btnWbOpenCard" title="${en ? "Open full 3D encyclopedia card" : "点击打开它的完整 3D 档案卡"}">
                 ${photo ? `<img src="${esc(photo)}" alt="" class="wb-species-thumb" />` : `<span style="font-size:2.2rem;">${v.icon}</span>`}
                 <div>
-                  <div style="font-weight:900;font-size:0.92rem;">${this.app.ruby(v.cardName)}</div>
-                  <div style="font-size:0.75rem;color:var(--c-teal-text);font-weight:800;">📖 ${esc(v.code)} · 点我看原卡</div>
+                  <div style="font-weight:900;font-size:0.92rem;">${en ? esc(v.enName || v.cardName) : this.app.ruby(v.cardName)}</div>
+                  <div style="font-size:0.75rem;color:var(--c-teal-text);font-weight:800;">📖 ${en ? "Open Fact Card →" : `${esc(v.code)} · 点我看原卡`}</div>
                 </div>
               </div>
 
               <div class="wb-meaning-hero">
-                <span class="wb-meaning-emoji">${v.icon}</span>
+                <span class="wb-meaning-emoji">${svgIcon || v.icon}</span>
                 <div>
-                  <div class="wb-meaning-zh">${esc(v.zh)} ${isMastered ? `<span class="wb-mastered-tag">✅ 已收进词典</span>` : ""}</div>
+                  <div class="wb-meaning-zh">${esc(v.zh)} ${v.level ? `<span class="wb-lvl-tag lvl-${esc(v.level).toLowerCase()}">${esc(v.level)}</span>` : ""} ${isMastered ? `<span class="wb-mastered-tag">${en ? "✅ Mastered" : "✅ 已收进词典"}</span>` : ""}</div>
+                  ${v.enDef ? `<div style="font-size:0.84rem;color:var(--text-sub);font-weight:700;margin-top:3px;">💡 ${esc(v.enDef)}</div>` : ""}
                   <div class="wb-meaning-hint">
-                    共 ${v.key.length} 个字母${this.wbDiff === "devil" ? " · 含 5 个混淆/双写陷阱！" : this.wbDiff === "normal" ? " · 含 3 个音近干扰字母！" : " · 点右侧积木拼出来！"}
+                    ${en
+                      ? `${v.key.length} letters${this.wbDiff === "devil" ? " · +5 tricky decoys!" : this.wbDiff === "normal" ? " · +3 decoy letters!" : " · Tap tiles to spell!"}`
+                      : `共 ${v.key.length} 个字母${this.wbDiff === "devil" ? " · 含 5 个混淆/双写陷阱！" : this.wbDiff === "normal" ? " · 含 3 个音近干扰字母！" : " · 点右侧积木拼出来！"}`}
                   </div>
                 </div>
               </div>
@@ -854,11 +935,11 @@
                 v.ex
                   ? this.wbDiff === "devil" && !this.wbSolved && !this.wbShowExHint
                     ? `<div class="wb-example-box" style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-                         <span style="font-size:0.82rem;font-weight:800;color:var(--text-sub);">🔥 魔鬼模式已隐藏例句，先听读音盲拼吧！</span>
-                         <button type="button" class="mini-btn" id="btnWbRevealEx" style="padding:4px 10px;min-height:30px;font-size:0.78rem;">💡 偷看例句</button>
+                         <span style="font-size:0.82rem;font-weight:800;color:var(--text-sub);">${en ? "🔥 Master mode hides the sentence — listen and spell!" : "🔥 魔鬼模式已隐藏例句，先听读音盲拼吧！"}</span>
+                         <button type="button" class="mini-btn" id="btnWbRevealEx" style="padding:4px 10px;min-height:30px;font-size:0.78rem;">${en ? "💡 Peek Sentence" : "💡 偷看例句"}</button>
                        </div>`
                     : `<div class="wb-example-box">
-                         <div style="font-size:0.74rem;font-weight:900;color:var(--c-warn-text);margin-bottom:4px;">📝 例句线索：</div>
+                         <div style="font-size:0.74rem;font-weight:900;color:var(--c-warn-text);margin-bottom:4px;">${en ? "📝 Sentence Clue:" : "📝 例句线索："}</div>
                          <div class="wb-example-text">${this.wbSolved ? highlightWordInSentence(v.ex, v.key) : blankOutWord(v.ex, v.key)}</div>
                        </div>`
                   : ""
@@ -866,11 +947,11 @@
 
               <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
                 <button type="button" class="big-action-btn" id="btnWbSpeakWord" style="padding:9px 16px;min-height:42px;font-size:0.9rem;">
-                  🔊 听单词发音
+                  ${en ? "🔊 Hear Word" : "🔊 听单词发音"}
                 </button>
                 ${
                   v.ex
-                    ? `<button type="button" class="mini-btn on" id="btnWbSpeakEx">🗣️ 听整句提示</button>`
+                    ? `<button type="button" class="mini-btn on" id="btnWbSpeakEx">${en ? "🗣️ Hear Sentence" : "🗣️ 听整句提示"}</button>`
                     : ""
                 }
               </div>
@@ -895,7 +976,7 @@
                       ? "slot-filled"
                       : "slot-empty";
                     return `
-                      <button type="button" class="wb-letter-slot ${cls}" data-sidx="${idx}" title="${s && !s.isHint ? "点我退回这个字母" : ""}">
+                      <button type="button" class="wb-letter-slot ${cls}" data-sidx="${idx}" title="${s && !s.isHint ? (en ? "Tap to remove letter" : "点我退回这个字母") : ""}">
                         ${s ? esc(s.ch.toUpperCase()) : ""}
                       </button>
                     `;
@@ -919,17 +1000,17 @@
                 ${
                   !this.wbSolved
                     ? `
-                  <button type="button" class="mini-btn on" id="btnWbHint">💡 提示一个字母</button>
-                  <button type="button" class="mini-btn" id="btnWbClear">🔄 清空重拼</button>
-                  <button type="button" class="mini-btn" id="btnWbSkip">⏭️ 换一个词</button>
+                  <button type="button" class="mini-btn on" id="btnWbHint">${en ? "💡 Letter Hint" : "💡 提示一个字母"}</button>
+                  <button type="button" class="mini-btn" id="btnWbClear">${en ? "🔄 Clear" : "🔄 清空重拼"}</button>
+                  <button type="button" class="mini-btn" id="btnWbSkip">${en ? "⏭️ Next Word" : "⏭️ 换一个词"}</button>
                 `
                     : `
                   <div class="wb-win-banner">
                     <div>
                       <div style="font-weight:900;font-size:1.05rem;color:var(--c-ok-text);">
-                        🎉 拼词成功！<strong>${esc(v.w)}</strong> = ${esc(v.zh)}！
+                        🎉 ${en ? `Awesome! <strong>${esc(v.w)}</strong> = ${esc(v.zh)}!` : `拼词成功！<strong>${esc(v.w)}</strong> = ${esc(v.zh)}！`}
                       </div>
-                      <div style="font-size:0.82rem;color:var(--text-sub);margin-top:2px;">已收进《我的 251 科学词典》⭐</div>
+                      <div style="font-size:0.82rem;color:var(--text-sub);margin-top:2px;">${en ? "Added to Core Wordbook progress ⭐" : "已收进核心词库掌握进度 ⭐"}</div>
                     </div>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
                       <button type="button" class="mini-btn on" id="btnWbReplayWin">🔊 再读一遍</button>

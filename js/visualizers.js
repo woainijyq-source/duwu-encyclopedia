@@ -84,6 +84,13 @@ class SoundFX {
       o.stop(t0 + 0.11);
     });
   }
+  win() {
+    this.chime();
+  }
+
+  boing() {
+    this.bonk();
+  }
 }
 
 window.SFX = new SoundFX();

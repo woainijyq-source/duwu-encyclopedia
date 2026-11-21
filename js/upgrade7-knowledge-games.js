@@ -570,10 +570,15 @@
 
     render() {
       if (!this.mountEl) return;
+      const en = window.isEn ? window.isEn() : true;
+      const flip = (txt) => (window.FlipReader ? window.FlipReader.render(txt) : esc(txt));
+      const enSafety = (window.DUWU_I18N && window.DUWU_I18N.getStagesEn().SAFETY_SCENARIOS) || {};
+
       const list = this._getFiltered();
       if (this.idx >= list.length) this.idx = 0;
       const sc = list[this.idx];
       if (!sc) return;
+      const enSc = enSafety[sc.id] || null;
 
       const wonList = this.app.state.safetyWon || [];
       const alreadyWon = wonList.includes(sc.id);
@@ -583,16 +588,25 @@
       const photo = this.app.getPhoto(sc.cardId);
       const showWin = this.solvedCurrent || this.reviewingWin;
 
+      const scTitle = en && enSc ? enSc.title : sc.title;
+      const scScene = en && enSc ? enSc.scene : sc.scene;
+      const scCatLabel = en && enSc ? enSc.catLabel : sc.catLabel;
+      const scExplain = en && enSc ? enSc.explain : sc.explain;
+      const scOpts = sc.opts.map((o, i) => ({
+        ...o,
+        text: en && enSc && enSc.opts && enSc.opts[i] ? enSc.opts[i].text : o.text
+      }));
+
       this.mountEl.innerHTML = `
         <div class="safety-arena-shell">
           <div class="wb-header-row">
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button type="button" class="scene-pill ${this.cat === "all" ? "active" : ""}" data-sfcat="all">🌟 全部 16 关</button>
-              <button type="button" class="scene-pill ${this.cat === "kitchen" ? "active" : ""}" data-sfcat="kitchen">🍳 厨房餐桌</button>
-              <button type="button" class="scene-pill ${this.cat === "wild" ? "active" : ""}" data-sfcat="wild">🏖️ 海边野外</button>
-              <button type="button" class="scene-pill ${this.cat === "home" ? "active" : ""}" data-sfcat="home">🏠 居家萌宠</button>
+              <button type="button" class="scene-pill ${this.cat === "all" ? "active" : ""}" data-sfcat="all">${en ? "🌟 All 16 Quests" : "🌟 全部 16 关"}</button>
+              <button type="button" class="scene-pill ${this.cat === "kitchen" ? "active" : ""}" data-sfcat="kitchen">${en ? "🍳 Kitchen & Food" : "🍳 厨房餐桌"}</button>
+              <button type="button" class="scene-pill ${this.cat === "wild" ? "active" : ""}" data-sfcat="wild">${en ? "🏖️ Beach & Wild" : "🏖️ 海边野外"}</button>
+              <button type="button" class="scene-pill ${this.cat === "home" ? "active" : ""}" data-sfcat="home">${en ? "🏠 Home & Pets" : "🏠 居家萌宠"}</button>
             </div>
-            <div class="en-pg-mastered-pill">🛡️ 已守护 ${totalWon}/${SAFETY_SCENARIOS.length} 个场景</div>
+            <div class="en-pg-mastered-pill">🛡️ ${en ? `Protected ${totalWon}/${SAFETY_SCENARIOS.length}` : `已守护 ${totalWon}/${SAFETY_SCENARIOS.length} 个场景`}</div>
           </div>
 
           <!-- 关卡圆点导航条 -->
@@ -600,9 +614,11 @@
             ${list
               .map((item, i) => {
                 const done = wonList.includes(item.id);
+                const eIt = enSafety[item.id];
+                const tLabel = en && eIt ? eIt.title.slice(0, 14) : item.title.slice(0, 8);
                 return `
                   <button type="button" class="safety-dot-pill ${i === this.idx ? "active" : ""} ${done ? "done" : ""}" data-sfidx="${i}">
-                    ${done ? "✅" : i + 1} ${esc(item.title.slice(0, 8))}…
+                    ${done ? "✅" : i + 1} ${esc(tLabel)}…
                   </button>
                 `;
               })
@@ -613,28 +629,28 @@
             <!-- 左侧写实插画情景 -->
             <div class="safety-visual-card">
               <div class="safety-illu-frame">
-                <img src="${esc(illu)}" alt="${esc(sc.title)}" class="safety-illu-img" />
-                <span class="safety-cat-badge">${sc.catLabel} · 第 ${this.idx + 1}/${list.length} 关</span>
-                ${photo ? `<img src="${esc(photo)}" alt="" class="safety-corner-photo" title="相关毒物真身" />` : ""}
+                <img src="${esc(illu)}" alt="${esc(scTitle)}" class="safety-illu-img" />
+                <span class="safety-cat-badge">${esc(scCatLabel)} · ${en ? `${this.idx + 1}/${list.length}` : `第 ${this.idx + 1}/${list.length} 关`}</span>
+                ${photo ? `<img src="${esc(photo)}" alt="" class="safety-corner-photo" title="Related species" />` : ""}
               </div>
-              <h3 class="safety-title">🚨 ${this.app.ruby(sc.title)}</h3>
-              <div class="safety-story-box">${this.app.ruby(sc.scene)}</div>
+              <h3 class="safety-title">🚨 ${en ? flip(scTitle) : this.app.ruby(scTitle)}</h3>
+              <div class="safety-story-box">${en ? flip(scScene) : this.app.ruby(scScene)}</div>
             </div>
 
             <!-- 右侧三大行动决策 + 双语安全口诀 -->
             <div class="safety-action-col">
               <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
                 <div style="font-weight:900;font-size:1.02rem;color:var(--c-warn-text);">
-                  🤔 小安全卫士，遇到这种情况你应该怎么做？
+                  ${en ? "🤔 Safety Hero, what is the smartest thing to do?" : "🤔 小安全卫士，遇到这种情况你应该怎么做？"}
                 </div>
                 ${
                   alreadyWon && !showWin
-                    ? `<button type="button" class="mini-btn on" id="btnSfReviewWin" style="padding:4px 10px;min-height:30px;font-size:0.78rem;">✅ 已通关 · 复习金句</button>`
+                    ? `<button type="button" class="mini-btn on" id="btnSfReviewWin" style="padding:4px 10px;min-height:30px;font-size:0.78rem;">${en ? "✅ Cleared · Review Motto" : "✅ 已通关 · 复习金句"}</button>`
                     : ""
                 }
               </div>
               <div class="safety-opts-list">
-                ${sc.opts
+                ${scOpts
                   .map((o, oIdx) => {
                     const isPicked = this.pickedIdx === oIdx;
                     const cls =
@@ -646,7 +662,7 @@
                     return `
                       <button type="button" class="safety-opt-btn ${cls}" data-sfopt="${oIdx}">
                         <span class="safety-opt-icon">${o.icon}</span>
-                        <span class="safety-opt-txt">${this.app.ruby(o.text)}</span>
+                        <span class="safety-opt-txt">${en ? esc(o.text) : this.app.ruby(o.text)}</span>
                       </button>
                     `;
                   })
@@ -656,7 +672,7 @@
               ${
                 this.pickedIdx >= 0 && !sc.opts[this.pickedIdx].ok
                   ? `<div style="margin-top:10px;padding:10px 14px;border-radius:14px;background:rgba(251,113,133,0.16);border:1.5px solid #fb7185;color:var(--c-err-text);font-weight:800;font-size:0.9rem;">
-                       🙈 哎呀这样会中招哦！想想《致命毒物大百科》里的科学原理，再选一个安全方案试试！
+                       ${en ? "🙈 Careful! That could be risky! Think about the science and pick the safest plan!" : "🙈 哎呀这样会中招哦！想想《致命毒物大百科》里的科学原理，再选一个安全方案试试！"}
                      </div>`
                   : ""
               }
@@ -665,19 +681,19 @@
                 showWin
                   ? `
                 <div class="safety-win-panel">
-                  <div class="safety-explain-txt">🎉🛡️ ${this.app.ruby(sc.explain)}</div>
-                  <div class="safety-en-motto-card" id="btnSfSpeakMotto" title="点我跟读这句英文安全口诀（读2遍）">
+                  <div class="safety-explain-txt">🎉🛡️ ${en ? flip(scExplain) : this.app.ruby(scExplain)}</div>
+                  <div class="safety-en-motto-card" id="btnSfSpeakMotto" title="Tap to listen">
                     <div class="safety-motto-top">
-                      <span class="bilingual-tag">🇬🇧 英文安全金句 ×2遍</span>
-                      <span style="font-size:0.78rem;color:var(--c-teal-text);font-weight:900;">🔊 点我跟读</span>
+                      <span class="bilingual-tag">🇬🇧 ${en ? "Safety Golden Motto" : "英文安全金句 ×2遍"}</span>
+                      <span style="font-size:0.78rem;color:var(--c-teal-text);font-weight:900;">🔊 ${en ? "Tap to Listen" : "点我跟读"}</span>
                     </div>
-                    <div class="safety-motto-en">${esc(sc.enMotto)}</div>
-                    <div class="safety-motto-zh">${this.app.ruby(sc.zhMotto)}</div>
+                    <div class="safety-motto-en">${en ? flip(sc.enMotto) : esc(sc.enMotto)}</div>
+                    ${!en ? `<div class="safety-motto-zh">${this.app.ruby(sc.zhMotto)}</div>` : ""}
                   </div>
                   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
-                    <button type="button" class="mini-btn" id="btnSfOpenCard">📖 看对应百科档案</button>
+                    <button type="button" class="mini-btn" id="btnSfOpenCard">📖 ${en ? "Open Fact Card" : "看对应百科档案"}</button>
                     <button type="button" class="big-action-btn" id="btnSfNext" style="padding:9px 20px;min-height:42px;font-size:0.92rem;">
-                      ${this.idx + 1 < list.length ? "下一关冒险 ➜" : "回到第 1 关 🔄"}
+                      ${this.idx + 1 < list.length ? (en ? "Next Adventure ➜" : "下一关冒险 ➜") : (en ? "Back to Quest 1 🔄" : "回到第 1 关 🔄")}
                     </button>
                   </div>
                 </div>
@@ -1405,10 +1421,17 @@
 
     render() {
       if (!this.mountEl) return;
+      const en = window.isEn ? window.isEn() : true;
+      const flip = (txt) => (window.FlipReader ? window.FlipReader.render(txt) : esc(txt));
+      const enMyths = (window.DUWU_I18N && window.DUWU_I18N.getStagesEn().MYTH_QUESTIONS) || {};
+
       const list = this._getFiltered();
       if (this.idx >= list.length) this.idx = 0;
       const q = list[this.idx];
       if (!q) return;
+      const enQ = enMyths[q.id] || null;
+      const stmtTxt = en && enQ ? enQ.stmt : q.stmt;
+      const expTxt = en && enQ ? enQ.explain : q.explain;
 
       const wonList = this.app.state.mythWon || [];
       const totalWon = MYTH_QUESTIONS.filter((x) => wonList.includes(x.id)).length;
@@ -1421,14 +1444,14 @@
         <div class="safety-arena-shell myth-arena-shell">
           <div class="wb-header-row">
             <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button type="button" class="scene-pill ${this.cat === "all" ? "active" : ""}" data-mcat="all">🌟 全部 24 题</button>
-              <button type="button" class="scene-pill ${this.cat === "law" ? "active" : ""}" data-mcat="law">🧪 毒理规律</button>
-              <button type="button" class="scene-pill ${this.cat === "nature" ? "active" : ""}" data-mcat="nature">🌿 动植物秘闻</button>
-              <button type="button" class="scene-pill ${this.cat === "safety" ? "active" : ""}" data-mcat="safety">🛡️ 防护与入药</button>
+              <button type="button" class="scene-pill ${this.cat === "all" ? "active" : ""}" data-mcat="all">${en ? "🌟 All 24 Cases" : "🌟 全部 24 题"}</button>
+              <button type="button" class="scene-pill ${this.cat === "law" ? "active" : ""}" data-mcat="law">${en ? "🧪 Toxin Laws" : "🧪 毒理规律"}</button>
+              <button type="button" class="scene-pill ${this.cat === "nature" ? "active" : ""}" data-mcat="nature">${en ? "🌿 Nature Secrets" : "🌿 动植物秘闻"}</button>
+              <button type="button" class="scene-pill ${this.cat === "safety" ? "active" : ""}" data-mcat="safety">${en ? "🛡️ Safety & Meds" : "🛡️ 防护与入药"}</button>
             </div>
             <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-              <span class="en-pg-mastered-pill">⚖️ 已判案 ${totalWon}/${MYTH_QUESTIONS.length}</span>
-              <span class="live-en-streak-pill">🔥 连对：${this.streak}</span>
+              <span class="en-pg-mastered-pill">⚖️ ${en ? `Judged ${totalWon}/${MYTH_QUESTIONS.length}` : `已判案 ${totalWon}/${MYTH_QUESTIONS.length}`}</span>
+              <span class="live-en-streak-pill">🔥 ${en ? "Streak:" : "连对："}${this.streak}</span>
             </div>
           </div>
 
@@ -1436,9 +1459,11 @@
             ${list
               .map((mq, i) => {
                 const done = wonList.includes(mq.id);
+                const eM = enMyths[mq.id];
+                const lbl = en && eM ? eM.stmt.slice(0, 14) : mq.stmt.slice(0, 7);
                 return `
                   <button type="button" class="safety-dot-pill ${i === this.idx ? "active" : ""} ${done ? "done" : ""}" data-midx="${i}">
-                    ${done ? "✅" : i + 1} ${esc(mq.stmt.slice(0, 7))}…
+                    ${done ? "✅" : i + 1} ${esc(lbl)}…
                   </button>
                 `;
               })
@@ -1450,9 +1475,9 @@
               ${photo ? `<img src="${esc(photo)}" alt="" class="myth-thumb-img" />` : `<div style="font-size:3rem;">⚖️</div>`}
               <div>
                 <div style="font-size:0.8rem;font-weight:900;color:var(--c-teal-text);">
-                  ⚖️ 科学法庭 · 第 ${this.idx + 1}/${list.length} 题 · 相关档案：${item ? `${item.emoji} ${this.app.ruby(item.name)}` : ""} ${ce.enName ? `(${esc(ce.enName)})` : ""}
+                  ⚖️ ${en ? `Science Court · Case ${this.idx + 1}/${list.length} · ${item ? item.emoji : ""} ${esc(ce.enName || "")}` : `科学法庭 · 第 ${this.idx + 1}/${list.length} 题 · 相关档案：${item ? `${item.emoji} ${this.app.ruby(item.name)}` : ""} ${ce.enName ? `(${esc(ce.enName)})` : ""}`}
                 </div>
-                <div class="myth-stmt-text">“${this.app.ruby(q.stmt)}”</div>
+                <div class="myth-stmt-text">“${en ? flip(stmtTxt) : this.app.ruby(stmtTxt)}”</div>
               </div>
             </div>
 
@@ -1465,8 +1490,8 @@
               >
                 <span class="myth-judge-icon">✅</span>
                 <span>
-                  <div style="font-size:1.15rem;font-weight:900;">真的！TRUE</div>
-                  <div style="font-size:0.78rem;opacity:0.85;">符合科学事实</div>
+                  <div style="font-size:1.15rem;font-weight:900;">${en ? "TRUE!" : "真的！TRUE"}</div>
+                  <div style="font-size:0.78rem;opacity:0.85;">${en ? "Real Science Fact" : "符合科学事实"}</div>
                 </span>
               </button>
               <button
@@ -1477,8 +1502,8 @@
               >
                 <span class="myth-judge-icon">❌</span>
                 <span>
-                  <div style="font-size:1.15rem;font-weight:900;">假的！FALSE</div>
-                  <div style="font-size:0.78rem;opacity:0.85;">这是科学谣言</div>
+                  <div style="font-size:1.15rem;font-weight:900;">${en ? "FALSE!" : "假的！FALSE"}</div>
+                  <div style="font-size:0.78rem;opacity:0.85;">${en ? "Science Myth!" : "这是科学谣言"}</div>
                 </span>
               </button>
             </div>
@@ -1490,23 +1515,23 @@
                 <div class="${isRight ? "win-title-text" : "warn-hint-text"}" style="margin-bottom:6px;">
                   ${
                     isRight
-                      ? `🔨 啪！科学大法官判决精准 (+2⭐)！这句话是【${q.isTrue ? "✅ 真的" : "❌ 假的"}】！`
-                      : `💡 差点就上当啦！正确答案是【${q.isTrue ? "✅ 真的" : "❌ 假的"}】，记下来下次稳拿满分！`
+                      ? (en ? `🔨 Gavel Down! Spot-on Science Judge (+2⭐)! This is ${q.isTrue ? "✅ TRUE" : "❌ FALSE"}!` : `🔨 啪！科学大法官判决精准 (+2⭐)！这句话是【${q.isTrue ? "✅ 真的" : "❌ 假的"}】！`)
+                      : (en ? `💡 Tricky myth! The real answer is ${q.isTrue ? "✅ TRUE" : "❌ FALSE"}!` : `💡 差点就上当啦！正确答案是【${q.isTrue ? "✅ 真的" : "❌ 假的"}】，记下来下次稳拿满分！`)
                   }
                 </div>
-                <div class="safety-explain-txt">🧪 ${this.app.ruby(q.explain)}</div>
-                <div class="safety-en-motto-card" id="btnMythSpeakEn" title="点我跟读这句英文科学结论（读2遍）">
+                <div class="safety-explain-txt">🧪 ${en ? flip(expTxt) : this.app.ruby(expTxt)}</div>
+                <div class="safety-en-motto-card" id="btnMythSpeakEn" title="Tap to listen">
                   <div class="safety-motto-top">
-                    <span class="bilingual-tag">🇬🇧 英文科学金句 ×2遍</span>
-                    <span style="font-size:0.78rem;color:var(--c-teal-text);font-weight:900;">🔊 点我跟读</span>
+                    <span class="bilingual-tag">🇬🇧 ${en ? "Key Science Fact" : "英文科学金句 ×2遍"}</span>
+                    <span style="font-size:0.78rem;color:var(--c-teal-text);font-weight:900;">🔊 ${en ? "Listen" : "点我跟读"}</span>
                   </div>
-                  <div class="safety-motto-en">${esc(q.enFact)}</div>
-                  <div class="safety-motto-zh">${this.app.ruby(q.zhFact)}</div>
+                  <div class="safety-motto-en">${en ? flip(q.enFact) : esc(q.enFact)}</div>
+                  ${!en ? `<div class="safety-motto-zh">${this.app.ruby(q.zhFact)}</div>` : ""}
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
-                  <button type="button" class="mini-btn" id="btnMythOpenCard">📖 看对应 3D 档案</button>
+                  <button type="button" class="mini-btn" id="btnMythOpenCard">📖 ${en ? "Open 3D Fact Card" : "看对应 3D 档案"}</button>
                   <button type="button" class="big-action-btn" id="btnMythNext" style="padding:9px 20px;min-height:42px;font-size:0.92rem;">
-                    ${this.idx + 1 < list.length ? "下一题判决 ➜" : "回到第 1 题 🔄"}
+                    ${this.idx + 1 < list.length ? (en ? "Next Case ➜" : "下一题判决 ➜") : (en ? "Back to Case 1 🔄" : "回到第 1 题 🔄")}
                   </button>
                 </div>
               </div>
@@ -1689,8 +1714,9 @@
     syncTopBadge() {
       const btn = document.getElementById("starCounter");
       if (!btn) return;
+      const en = window.isEn ? window.isEn() : true;
       const hasGift = this.hasClaimableMission();
-      btn.innerHTML = `⭐ ${this.app.state.stars || 0} <span class="passport-chip-tag">🏅护照${hasGift ? " 🎁" : ""}</span>`;
+      btn.innerHTML = `⭐ ${this.app.state.stars || 0} <span class="passport-chip-tag">${en ? "🏅Passport" : "🏅护照"}${hasGift ? " 🎁" : ""}</span>`;
       btn.classList.toggle("has-gift", hasGift);
     }
 

@@ -16,11 +16,16 @@ tar -C "${PROJECT_DIR}" -czf - index.html manifest.webmanifest sw.js css js asse
 echo "==> [3/5] Installing Curator Voice, Doubao TTS Cache & DeepSeek Interactive API service (127.0.0.1:8798)..."
 PET_ENV="/Users/mac/projects/电子宠物/server/.env"
 DOUDOU_ENV="/Users/mac/projects/doudou-writing/.env"
+CLOUD_TTS_BIN="/Users/mac/.gemini/bin/cloud_tts.py"
 TTS_KEY=""
+VOXCPM_KEY=""
 AI_BASE_VAL="https://doudou-newapi.com"
 AI_KEY_VAL=""
 AI_MODEL_VAL="DeepSeek-V4.1-Flash"
 
+if [ -f "${CLOUD_TTS_BIN}" ]; then
+  VOXCPM_KEY="$(python3 -c 'import re,pathlib; s=pathlib.Path("/Users/mac/.gemini/bin/cloud_tts.py").read_text("utf-8"); m=re.search(r"CLOUD_TTS_API_KEY\",\s*\"([^\"]+)\"", s); print(m.group(1) if m else "")')"
+fi
 if [ -f "${PET_ENV}" ]; then
   TTS_KEY="$(grep -E '^DOUBAO_TTS_API_KEY=' "${PET_ENV}" | head -n1 | cut -d= -f2- | tr -d '\r\"'\''')"
 fi
@@ -30,8 +35,11 @@ if [ -f "${DOUDOU_ENV}" ]; then
   AI_MODEL_VAL="$(grep -E '^AI_MODEL=' "${DOUDOU_ENV}" | head -n1 | cut -d= -f2- | tr -d '\r\"'\''')"
 fi
 
-if [ -n "${TTS_KEY}" ]; then
+if [ -n "${VOXCPM_KEY}" ] || [ -n "${TTS_KEY}" ]; then
   ssh "${REMOTE_HOST}" "umask 077 && cat > '${REMOTE_BASE}/shared-data/tts.env'" <<EOF
+VOXCPM_TTS_ENDPOINT=http://127.0.0.1:18888/tts/v1/audio/speech
+VOXCPM_TTS_KEY=${VOXCPM_KEY}
+VOXCPM_TTS_VOICE=doubao_vivi
 VOLC_TTS_KEY=${TTS_KEY}
 VOLC_TTS_RESOURCE_ID=seed-tts-2.0
 VOLC_TTS_SPEAKER=zh_female_xiaohe_uranus_bigtts

@@ -41,10 +41,19 @@ ALLOWED_REC_MIMES = {
 SHARED_ROOT = Path(os.environ.get("DUWU_SHARED_DIR", "/www/wwwroot/duwu-encyclopedia/shared-data"))
 REC_DIR = Path(os.environ.get("DUWU_VOICE_DIR", str(SHARED_ROOT / "recordings")))
 TTS_DIR = Path(os.environ.get("DUWU_TTS_CACHE_DIR", str(SHARED_ROOT / "tts-cache")))
+PROGRESS_FILE = Path(os.environ.get("DUWU_PROGRESS_FILE", str(SHARED_ROOT / "progress.json")))
+MAX_PROGRESS_BYTES = 512_000  # 512 KB max for Word Box + learning progress JSON
 HOST = os.environ.get("DUWU_VOICE_HOST", "127.0.0.1")
 PORT = int(os.environ.get("DUWU_VOICE_PORT", "8798"))
 
-# Doubao / Volcengine seed-tts-2.0 configuration (loaded strictly from env / tts.env, NEVER hardcoded!)
+# Primary zero-cost self-hosted VoxCPM2 Cloud TTS (loaded from env / tts.env, NEVER hardcoded!)
+VOXCPM_TTS_ENDPOINT = (
+    os.environ.get("VOXCPM_TTS_ENDPOINT") or "http://127.0.0.1:18888/tts/v1/audio/speech"
+).strip()
+VOXCPM_TTS_KEY = (os.environ.get("VOXCPM_TTS_KEY") or "").strip()
+VOXCPM_TTS_VOICE = (os.environ.get("VOXCPM_TTS_VOICE") or "doubao_vivi").strip()
+
+# Fallback Doubao / Volcengine seed-tts-2.0 configuration (loaded strictly from env / tts.env)
 VOLC_TTS_KEY = (
     os.environ.get("VOLC_TTS_KEY")
     or os.environ.get("VOLCENGINE_TTS_API_KEY")
@@ -67,7 +76,7 @@ AI_BASE = (os.environ.get("AI_BASE") or "https://doudou-newapi.com").strip().rst
 AI_KEY = (os.environ.get("AI_KEY") or "").strip()
 AI_MODEL = (os.environ.get("AI_MODEL") or "DeepSeek-V4.1-Flash").strip()
 
-TTS_MAX_CHARS = 600
+TTS_MAX_CHARS = 1200
 TTS_PER_IP_HOUR = int(os.environ.get("TTS_PER_IP_HOUR", "600"))
 TTS_PER_DAY = int(os.environ.get("TTS_PER_DAY", "3000"))
 CHAT_PER_IP_HOUR = int(os.environ.get("CHAT_PER_IP_HOUR", "120"))
@@ -96,16 +105,25 @@ def ensure_dirs():
 
 def normalize_tts_text(raw: str) -> str:
     s = str(raw or "")
-    s = s.replace("+1❤️", "加1颗红心").replace("+1 ❤️", "加1颗红心")
-    s = s.replace("°C", "摄氏度").replace("mmHg", "毫米汞柱").replace("BPM", "次每分钟")
+    has_zh = bool(re.search(r"[\u4e00-\u9fff]", s))
+    if has_zh:
+        s = s.replace("+1❤️", "加1颗红心").replace("+1 ❤️", "加1颗红心")
+        s = s.replace("°C", "摄氏度").replace("mmHg", "毫米汞柱").replace("BPM", "次每分钟")
+    else:
+        s = s.replace("°C", " degrees Celsius").replace("mmHg", " millimeters of mercury").replace("BPM", " beats per minute")
+        s = s.replace("—", ", ")
     s = EMOJI_STRIP_RE.sub(" ", s)
     s = re.sub(r"\s+", " ", s)
     s = re.sub(r"([。！？；，、：”』」）》])\s+", r"\1", s).strip()
     return s[:TTS_MAX_CHARS]
 
 
-def compute_tts_key(clean_text: str) -> str:
-    material = f"{VOLC_TTS_SPEAKER}|{VOLC_TTS_RATE}|{VOLC_TTS_TONE}|{clean_text}"
+def compute_tts_key(clean_text: str, voice_override: str = "") -> str:
+    if VOXCPM_TTS_KEY:
+        v = voice_override or VOXCPM_TTS_VOICE
+        material = f"voxcpm2|{v}|{clean_text}"
+    else:
+        material = f"{VOLC_TTS_SPEAKER}|{VOLC_TTS_RATE}|{VOLC_TTS_TONE}|{clean_text}"
     return hashlib.sha256(material.encode("utf-8")).hexdigest()
 
 
@@ -157,6 +175,44 @@ def release_key_lock(key: str, lk: threading.Lock):
     with _global_lock:
         if _inflight_locks.get(key) is lk and not lk.locked():
             _inflight_locks.pop(key, None)
+
+
+def synthesize_voxcpm_mp3(clean_text: str, voice_override: str = "") -> bytes:
+    if not VOXCPM_TTS_KEY:
+        raise RuntimeError("voxcpm_key_not_configured")
+
+    voice_id = (voice_override or VOXCPM_TTS_VOICE or "doubao_vivi").strip()
+    if not re.match(r"^[a-zA-Z0-9_-]{2,48}$", voice_id):
+        voice_id = VOXCPM_TTS_VOICE or "doubao_vivi"
+
+    payload = {
+        "model": "voxcpm2",
+        "input": clean_text,
+        "voice": voice_id,
+        "response_format": "mp3",
+        "steps": 10 if len(clean_text) <= 30 else 8,
+        "auto_wake": True,
+    }
+    req = urllib.request.Request(
+        VOXCPM_TTS_ENDPOINT,
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {VOXCPM_TTS_KEY}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=180) as resp:
+        mp3_bytes = resp.read()
+    if not is_valid_mp3(mp3_bytes):
+        raise RuntimeError("invalid_voxcpm_mp3_output")
+    return mp3_bytes
+
+
+def synthesize_tts_mp3(clean_text: str, voice_override: str = "") -> bytes:
+    if VOXCPM_TTS_KEY:
+        return synthesize_voxcpm_mp3(clean_text, voice_override)
+    return synthesize_doubao_mp3(clean_text)
 
 
 def synthesize_doubao_mp3(clean_text: str) -> bytes:
@@ -241,18 +297,27 @@ def check_chat_quota(client_ip: str) -> str | None:
     return None
 
 
-def call_deepseek_chat(question: str, card: dict | None, history: list | None) -> str:
+def call_deepseek_chat(question: str, card: dict | None, history: list | None, lang: str = "zh") -> str:
     if not AI_KEY:
         raise RuntimeError("ai_key_not_configured")
 
-    sys_lines = [
-        "你是《奇妙毒物科学游乐园》里的百科语音互动伙伴，正在跟一位聪明好奇的8岁小女孩实时对话。",
-        "请严格遵守以下规则：",
-        "1. 语气温暖亲切、充满童趣和科学好奇心，直接回答孩子的问题。",
-        "2. 回答必须简短好听，控制在 55 到 115 个汉字之间（2到3句话），适合直接语音朗读，绝不长篇大论。",
-        "3. 在回答中自然穿插 1 句简单地道、适合8岁孩子跟读的英文短句（4~8个单词，以英文句号或感叹号结尾），并紧跟中文意思。",
-        "4. 只输出纯文本句子，严禁使用 Markdown 星号(*)、井号(#)、列表符号或表情符号。",
-    ]
+    if lang == "en":
+        sys_lines = [
+            "You are Professor Dart, a cheerful golden poison dart frog science guide talking to a bright 8-year-old learning English (Cambridge Movers-Flyers level).",
+            "Rules:",
+            "1. Reply in warm, vivid, simple English (2 to 3 short sentences, under 55 words total).",
+            "2. Naturally use 1 or 2 useful science core words (like toxin, venom, absorb, protect, predator, defend, molecule, survive).",
+            "3. Plain text only — no markdown symbols (*, #, -) and no emojis.",
+        ]
+    else:
+        sys_lines = [
+            "你是《奇妙毒物科学游乐园》里的百科语音互动伙伴，正在跟一位聪明好奇的8岁小女孩实时对话。",
+            "请严格遵守以下规则：",
+            "1. 语气温暖亲切、充满童趣和科学好奇心，直接回答孩子的问题。",
+            "2. 回答必须简短好听，控制在 55 到 115 个汉字之间（2到3句话），适合直接语音朗读，绝不长篇大论。",
+            "3. 在回答中自然穿插 1 句简单地道、适合8岁孩子跟读的英文短句（4~8个单词，以英文句号或感叹号结尾），并紧跟中文意思。",
+            "4. 只输出纯文本句子，严禁使用 Markdown 星号(*)、井号(#)、列表符号或表情符号。",
+        ]
 
     if isinstance(card, dict) and card.get("name"):
         c_name = str(card.get("name") or "")[:40]
@@ -396,16 +461,16 @@ class DuwuVoiceAndTTSHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _handle_tts(self, raw_text: str):
+    def _handle_tts(self, raw_text: str, voice_override: str = ""):
         clean_text = normalize_tts_text(raw_text)
         if not clean_text:
             return self._send_json(400, {"ok": False, "error": "empty_text"})
 
         ensure_dirs()
-        key = compute_tts_key(clean_text)
+        key = compute_tts_key(clean_text, voice_override)
         cache_file = tts_cache_path(key)
 
-        # 1. Fast-path permanent disk cache HIT (zero Doubao API cost!)
+        # 1. Fast-path permanent disk cache HIT (zero API cost!)
         if cache_file.exists():
             data = cache_file.read_bytes()
             if is_valid_mp3(data):
@@ -418,13 +483,13 @@ class DuwuVoiceAndTTSHandler(BaseHTTPRequestHandler):
                     {"X-TTS-Cache": "HIT", "X-TTS-Key": key[:16]},
                 )
 
-        # 2. Cache MISS: verify origin & quota before spending any API call
-        if not VOLC_TTS_KEY:
+        # 2. Cache MISS: verify origin & quota before calling VoxCPM2 / fallback
+        if not VOXCPM_TTS_KEY and not VOLC_TTS_KEY:
             return self._send_json(503, {"ok": False, "error": "tts_not_configured"})
         if not self._allowed_origin():
             return self._send_json(403, {"ok": False, "error": "forbidden_origin"})
 
-        # 3. Singleflight lock so concurrent requests for the same text only call Doubao ONCE!
+        # 3. Singleflight lock so concurrent requests for the same text only synthesize ONCE!
         lk = get_key_lock(key)
         lk.acquire()
         try:
@@ -444,7 +509,7 @@ class DuwuVoiceAndTTSHandler(BaseHTTPRequestHandler):
             if quota_err:
                 return self._send_json(429, {"ok": False, "error": quota_err})
 
-            mp3_bytes = synthesize_doubao_mp3(clean_text)
+            mp3_bytes = synthesize_tts_mp3(clean_text, voice_override)
             cache_file.parent.mkdir(parents=True, exist_ok=True)
             tmp_path = cache_file.with_suffix(f".{uuid.uuid4().hex[:8]}.tmp")
             tmp_path.write_bytes(mp3_bytes)
@@ -467,6 +532,67 @@ class DuwuVoiceAndTTSHandler(BaseHTTPRequestHandler):
             lk.release()
             release_key_lock(key, lk)
 
+    def _handle_get_progress(self):
+        ensure_dirs()
+        if not PROGRESS_FILE.exists():
+            return self._send_json(200, {"ok": True, "progress": None, "updatedAt": 0})
+        try:
+            data = json.loads(PROGRESS_FILE.read_text("utf-8"))
+            return self._send_json(200, {"ok": True, "progress": data, "updatedAt": int(data.get("updatedAt", 0))})
+        except Exception:
+            return self._send_json(200, {"ok": True, "progress": None, "updatedAt": 0})
+
+    def _handle_post_progress(self, body: dict):
+        if not self._allowed_origin():
+            return self._send_json(403, {"ok": False, "error": "forbidden_origin"})
+        ensure_dirs()
+        incoming = body.get("progress") if isinstance(body.get("progress"), dict) else body
+        if not isinstance(incoming, dict):
+            return self._send_json(400, {"ok": False, "error": "invalid_progress"})
+
+        now_ms = int(time.time() * 1000)
+        with _global_lock:
+            existing = {}
+            if PROGRESS_FILE.exists():
+                try:
+                    existing = json.loads(PROGRESS_FILE.read_text("utf-8"))
+                    if not isinstance(existing, dict):
+                        existing = {}
+                except Exception:
+                    existing = {}
+
+            # Smart merge for wordBox & coreMastery so multi-device usage never loses progress
+            merged = dict(existing)
+            for k, v in incoming.items():
+                if k in ("wordBox", "coreMastery") and isinstance(v, dict) and isinstance(merged.get(k), dict):
+                    sub = dict(merged[k])
+                    for wk, wv in v.items():
+                        prev = sub.get(wk)
+                        if isinstance(wv, dict) and isinstance(prev, dict):
+                            sub[wk] = {
+                                **prev,
+                                **wv,
+                                "taps": max(int(prev.get("taps", 0)), int(wv.get("taps", 0))),
+                                "correct": max(int(prev.get("correct", 0)), int(wv.get("correct", 0))),
+                                "mastered": bool(prev.get("mastered") or wv.get("mastered")),
+                                "lastSeen": max(int(prev.get("lastSeen", 0)), int(wv.get("lastSeen", 0))),
+                            }
+                        else:
+                            sub[wk] = wv
+                    merged[k] = sub
+                elif k == "stars":
+                    merged[k] = max(int(merged.get("stars", 0) or 0), int(v or 0))
+                else:
+                    merged[k] = v
+            merged["updatedAt"] = now_ms
+
+            PROGRESS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            tmp_p = PROGRESS_FILE.with_suffix(".tmp")
+            tmp_p.write_text(json.dumps(merged, ensure_ascii=False), encoding="utf-8")
+            tmp_p.replace(PROGRESS_FILE)
+
+        return self._send_json(200, {"ok": True, "updatedAt": now_ms, "progress": merged})
+
     def do_HEAD(self):
         self.send_response(200)
         self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -487,8 +613,9 @@ class DuwuVoiceAndTTSHandler(BaseHTTPRequestHandler):
 
         card = body.get("card") if isinstance(body.get("card"), dict) else None
         history = body.get("history") if isinstance(body.get("history"), list) else None
+        lang = "en" if str(body.get("lang") or "").lower().startswith("en") else "zh"
         try:
-            reply = call_deepseek_chat(question, card, history)
+            reply = call_deepseek_chat(question, card, history, lang=lang)
             with _global_lock:
                 _stats["chats"] += 1
             return self._send_json(200, {"ok": True, "reply": reply, "model": AI_MODEL})
@@ -501,6 +628,9 @@ class DuwuVoiceAndTTSHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/")
 
+        if path == "/api/progress":
+            return self._handle_get_progress()
+
         if path == "/api/tts/stats":
             ensure_dirs()
             files = list(TTS_DIR.rglob("*.mp3"))
@@ -509,8 +639,9 @@ class DuwuVoiceAndTTSHandler(BaseHTTPRequestHandler):
                 snap = dict(_stats)
             return self._send_json(200, {
                 "ok": True,
-                "configured": bool(VOLC_TTS_KEY),
-                "speaker": VOLC_TTS_SPEAKER,
+                "configured": bool(VOXCPM_TTS_KEY or VOLC_TTS_KEY),
+                "engine": "voxcpm2" if VOXCPM_TTS_KEY else ("volcengine" if VOLC_TTS_KEY else "none"),
+                "speaker": VOXCPM_TTS_VOICE if VOXCPM_TTS_KEY else VOLC_TTS_SPEAKER,
                 "aiConfigured": bool(AI_KEY),
                 "aiModel": AI_MODEL,
                 "cachedFiles": len(files),
@@ -524,7 +655,8 @@ class DuwuVoiceAndTTSHandler(BaseHTTPRequestHandler):
         if path == "/api/tts":
             qs = parse_qs(parsed.query)
             text = (qs.get("t") or qs.get("text") or [""])[0]
-            return self._handle_tts(text)
+            voice = (qs.get("voice") or [""])[0]
+            return self._handle_tts(text, voice)
 
         if path == "/api/recordings":
             ensure_dirs()
@@ -567,6 +699,16 @@ class DuwuVoiceAndTTSHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         path = parsed.path.rstrip("/")
 
+        if path == "/api/progress":
+            length = int(self.headers.get("Content-Length", "0") or "0")
+            if length <= 0 or length > MAX_PROGRESS_BYTES:
+                return self._send_json(400, {"ok": False, "error": "invalid_progress_body"})
+            try:
+                body = json.loads(self.rfile.read(length).decode("utf-8"))
+            except Exception:
+                return self._send_json(400, {"ok": False, "error": "invalid_json"})
+            return self._handle_post_progress(body)
+
         if path == "/api/tts":
             length = int(self.headers.get("Content-Length", "0") or "0")
             if length <= 0 or length > 8192:
@@ -574,9 +716,10 @@ class DuwuVoiceAndTTSHandler(BaseHTTPRequestHandler):
             try:
                 body = json.loads(self.rfile.read(length).decode("utf-8"))
                 text = body.get("text") or body.get("t") or ""
+                voice = body.get("voice") or ""
             except Exception:
                 return self._send_json(400, {"ok": False, "error": "invalid_json"})
-            return self._handle_tts(text)
+            return self._handle_tts(text, voice)
 
         if path == "/api/chat":
             length = int(self.headers.get("Content-Length", "0") or "0")
