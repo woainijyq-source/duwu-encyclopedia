@@ -131,16 +131,19 @@ def main():
 
             cache_file.parent.mkdir(parents=True, exist_ok=True)
             tmp_raw = cache_file.with_suffix(f".{uuid.uuid4().hex[:6]}.raw.mp3")
-            tmp_out = cache_file.with_suffix(f".{uuid.uuid4().hex[:6]}.tmp")
+            tmp_out = cache_file.with_suffix(f".{uuid.uuid4().hex[:6]}.out.mp3")
             tmp_raw.write_bytes(raw_mp3)
 
             if ffmpeg_bin:
-                subprocess.run(
-                    [ffmpeg_bin, "-y", "-v", "error", "-i", str(tmp_raw), "-ac", "1", "-ar", "24000", "-b:a", "64k", str(tmp_out)],
-                    check=True,
-                )
-                tmp_raw.unlink(missing_ok=True)
-                tmp_out.replace(cache_file)
+                try:
+                    subprocess.run(
+                        [ffmpeg_bin, "-y", "-v", "error", "-i", str(tmp_raw), "-ac", "1", "-ar", "24000", "-b:a", "64k", "-f", "mp3", str(tmp_out)],
+                        check=True,
+                    )
+                    tmp_out.replace(cache_file)
+                finally:
+                    tmp_raw.unlink(missing_ok=True)
+                    tmp_out.unlink(missing_ok=True)
             else:
                 tmp_raw.replace(cache_file)
 
